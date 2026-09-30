@@ -237,40 +237,6 @@ export const NAV_SECTIONS: NavSection[] = [
   },
 ];
 
-export const MOBILE_BOTTOM_NAV: NavItem[] = [
-  {
-    label: "Dashboard",
-    href: "/dashboard",
-    icon: LayoutDashboard,
-    permissions: [PERMISSIONS.DASHBOARD_VIEW],
-    exact: true,
-  },
-  {
-    label: "POS",
-    href: "/pos",
-    icon: MonitorSmartphone,
-    permissions: [PERMISSIONS.SALES_CREATE, PERMISSIONS.INVOICE_CREATE],
-  },
-  {
-    label: "Products",
-    href: "/products",
-    icon: Package,
-    permissions: [PERMISSIONS.PRODUCT_VIEW],
-  },
-  {
-    label: "Invoices",
-    href: "/invoices",
-    icon: Receipt,
-    permissions: [PERMISSIONS.INVOICE_VIEW],
-  },
-  {
-    label: "More",
-    href: "/menu",
-    icon: Settings,
-    permissions: [],
-  },
-];
-
 export function visibleSections(permissions: PermissionCode[]): NavSection[] {
   const has = (item: NavItem) =>
     item.permissions.length === 0 || item.permissions.some((code) => permissions.includes(code));

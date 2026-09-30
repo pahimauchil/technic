@@ -172,6 +172,23 @@ Audited every non-essential file with reference checks before removal:
   production server boots, `/login` returns 200 and app routes correctly
   auth-redirect (307).
 
+### Broken-path audit — 30 Sep 2026
+
+Every internal link/nav target checked against real routes. Fixed:
+
+- **`/profile` 404** (user-menu link): created a profile page showing staff
+  identity, role, branch, current billing mode and security guidance —
+  visible to every signed-in user.
+- **`/products/new` 404** ("Add product" button): created the page with a
+  full form (pricing, HSN, GST rate, warranty, serial/IMEI tracking flags)
+  wired to the existing `createProduct` service; redirects to the new
+  product's detail page. Verified live by creating a product.
+- **`/customers/[id]` 404** ("View customer →" on invoices): created the
+  customer detail page — outstanding balance, total purchases, record
+  counts, recent invoices and contact/credit info.
+- **`/menu`** dead entry in `MOBILE_BOTTOM_NAV` discarded (the export had no
+  consumers; the real mobile bottom nav opens the sidebar directly).
+
 ## Remaining Work
 
 - Replace demo access codes (900001–900008) and firm mode codes before go-live.
