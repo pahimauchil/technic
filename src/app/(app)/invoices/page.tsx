@@ -109,8 +109,10 @@ export default async function InvoicesPage({
         actions={
           <>
             <Button asChild variant="outline">
-              <a href={`/api/export/invoices?${new URLSearchParams(
-                Object.entries(params).filter(([, v]) => v).map(([k, v]) => [k, v as string]),
+              <a href={`/api/export?type=invoices&${new URLSearchParams(
+                Object.entries(params)
+                  .filter(([key, value]) => value && ["q", "status", "kind", "from", "to"].includes(key))
+                  .map(([key, value]) => [key, value as string]),
               ).toString()}`}>Export CSV</a>
             </Button>
             <Button asChild>

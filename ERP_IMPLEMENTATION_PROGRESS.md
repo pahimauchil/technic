@@ -189,6 +189,57 @@ Every internal link/nav target checked against real routes. Fixed:
 - **`/menu`** dead entry in `MOBILE_BOTTOM_NAV` discarded (the export had no
   consumers; the real mobile bottom nav opens the sidebar directly).
 
+## Numeric Input Fix — clearable numbers, no leading zeros (30 Sep 2026)
+
+**Bug**: line-item number inputs held numeric state and coerced through
+`Number(e.target.value)` in `onChange`, so clearing a field snapped it to
+`0`/`1` (stuck value) and the next keystrokes concatenated (`0` + `77` →
+`077`).
+
+**Fix**: inputs keep the raw text in state (strings) while editing; parsing
+happens on submit, tidying on blur —
+
+- New helpers in `src/lib/numeric-input.ts`: `parseNumericInput` ("" → 0),
+  `tidyQuantityOnBlur` (whole ≥ min, strips leading zeros),
+  `tidyAmountOnBlur` (non-negative, strips leading zeros),
+  `tidyOptionalQuantityOnBlur` ("" stays "").
+- `pos/pos-terminal.tsx` — cart `quantity`/`unitPrice` are raw strings;
+  totals, serial-count validation and the checkout payload parse on use;
+  +/− buttons go through `parseNumericInput`.
+- `purchases/new-button.tsx` — GRN line quantity & unit cost same treatment
+  (auto-filled unit price stringified).
+- `inventory/transfers/new-button.tsx` — transfer line quantity.
+- `invoices/[id]/sales-return-button.tsx` — per-line return quantities are a
+  `Record<string, string>`; refund total and payload parse on use; an empty
+  field stays empty (no accidental 0-qty line).
+
+Forms audited and already correct (string state, clearable): expenses amount,
+record-payment amounts (payments page + invoice page), stock-adjustment
+quantity, new-product prices/warranty/low-stock, POS "amount received", GRN
+"payment now", login & new-user access codes (`inputMode="numeric"`,
+maxLength 6). The quotation dialog has no editable numeric inputs (read-only
+line summary).
+
+Server-side validation untouched (zod schemas and services parse numbers as
+before) — the change is purely input UX. The affected components are shared
+by every role (permission gating is page-level). Verified live as Super
+Admin: typecheck ✓, `next build` ✓ (41 routes); POS clear→type `7` shows `7`,
+blur `010`→`10`, `077`→`77`, empty qty→`1`, empty price→`0`, decimals kept;
+GRN and sales-return dialogs re-tested with the same results.
+
+Also 30 Sep 2026: favicon `src/app/icon.svg` replaced with the Technic TT
+monogram (commit 1d469a0) — the tab icon still showed the laundry-era
+t-shirt mark.
+
+**Export CSV 404**: the Invoices page linked to `/api/export/invoices`, a
+route that never existed — the export API lives at `/api/export` with a
+`type` param (invoices/sales/purchases/gst-summary). The href now points to
+`/api/export?type=invoices` and passes only the filter params the API
+understands (`q/status/kind/from/to`), so the CSV matches what's on screen
+without the pagination `page` param leaking in. Verified live: 200, correct
+headers, `kind=GST` and `status=PAID` filters respected, reports-page
+exports unaffected.
+
 ## Remaining Work
 
 - Replace demo access codes (900001–900008) and firm mode codes before go-live.
