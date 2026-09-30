@@ -74,7 +74,7 @@ export function LoginForm() {
   };
 
   return (
-    <Card className="border border-emerald-500/20 bg-white/95 shadow-2xl backdrop-blur">
+    <Card className="border border-white/15 bg-white/95 shadow-2xl backdrop-blur">
       <CardContent className="pt-6">
         <form ref={formRef} action={formAction} className="space-y-6">
           <input type="hidden" name="callbackUrl" value={callbackUrl} />
@@ -113,15 +113,15 @@ export function LoginForm() {
                 onFocus={(event) => event.target.select()}
                 className={cn(
                   "h-14 w-11 rounded-xl border border-slate-200 bg-slate-50/50 text-center text-2xl font-bold tracking-widest text-slate-900 shadow-sm transition-all",
-                  "focus:border-emerald-600 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/30",
-                  digit && "border-emerald-600 bg-emerald-50/30 text-emerald-950",
+                  "focus:border-[#123524] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#123524]/25",
+                  digit && "border-[#123524] bg-[#123524]/5 text-[#123524]",
                 )}
                 aria-label={`Digit ${index + 1}`}
               />
             ))}
           </div>
 
-          <SubmitButton className="h-12 w-full text-base bg-[#0a3b2c] hover:bg-[#06261c] text-white shadow-lg shadow-emerald-950/20" disabled={!complete}>
+          <SubmitButton className="h-12 w-full bg-[#123524] text-base text-white shadow-lg shadow-emerald-950/20 hover:bg-[#0d2719]">
             Continue
           </SubmitButton>
         </form>

@@ -17,3 +17,5 @@ src/generated/
 _whatsapp_auth/
 open-wa-session*.json
 _IGNORE_session/
+.freebuff/
+.node-persist/

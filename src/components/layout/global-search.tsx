@@ -7,8 +7,9 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 /**
- * One box that answers "where is this?" — accepts garment codes, order
- * numbers, rack slots or a customer phone number and routes to the answer.
+ * One box that answers "where is this?" — accepts product names, SKUs,
+ * barcodes, serial numbers / IMEIs, invoice numbers or a customer phone
+ * number and routes to the answer.
  */
 export function GlobalSearch() {
   const router = useRouter();
@@ -28,7 +29,7 @@ export function GlobalSearch() {
       <Input
         value={value}
         onChange={(event) => setValue(event.target.value)}
-        placeholder="Search…"
+        placeholder="Search products, serials, invoices…"
         className="h-10 rounded-full border-transparent bg-muted pl-10 shadow-none focus-visible:border-input focus-visible:bg-card"
         aria-label="Global search"
       />

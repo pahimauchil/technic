@@ -1,5 +1,6 @@
-// Aura Laundry ERP — database schema
-// Architecture: Order → Garment → Processing → Location → Delivery → Payment
+// Technic Technologies — Electronics ERP database schema
+// Architecture: Firm → Branch → User → Business data, with GST / NON-GST
+// access modes enforced on every operational record.
 
 generator client {
   provider = "prisma-client"
@@ -14,19 +15,18 @@ datasource db {
 // ENUMS
 // ============================================================================
 
-// PLATFORM_ADMIN is the cross-firm system operator (spec: "Super Admin") —
-// belongs to no single firm (User.firmId is null) and manages the Firms
-// module itself, optionally "entering" a firm to operate inside it.
-// SUPER_ADMIN is the existing per-firm admin role (spec: "Firm Admin") —
-// unchanged in behavior, now naturally bounded to the one firm its
-// branches belong to. Kept the same enum value to avoid rewriting every
-// existing seeded access code and role check; see ROLE_LABELS for the
-// display-name mapping.
+/// PLATFORM_ADMIN is the cross-firm system operator ("Super Admin") — belongs
+/// to no single firm and manages firms, users and access codes across them.
+/// The remaining roles are the firm-level roles from the handover spec.
 enum UserRole {
   PLATFORM_ADMIN
-  SUPER_ADMIN
+  ADMIN
   MANAGER
-  SCANNER
+  ACCOUNTANT
+  SALES_STAFF
+  PURCHASE_STAFF
+  INVENTORY_MANAGER
+  VIEWER
 }
 
 enum FirmStatus {
@@ -43,200 +43,116 @@ enum UserStatus {
 enum BranchType {
   HEAD_OFFICE
   BRANCH
-  CENTRAL_PROCESSING_UNIT
+  WAREHOUSE
 }
 
-enum OrderType {
-  WALK_IN
-  PICKUP
-  DELIVERY
+enum AccessCodeType {
+  GST
+  NON_GST
 }
 
-enum OrderPriority {
-  NORMAL
-  EXPRESS
-  URGENT
+enum TaxMode {
+  GST
+  NON_GST
 }
 
-enum OrderStatus {
-  RECEIVED
-  SORTING
-  WASHING
-  DRYING
-  IRONING
-  QUALITY_CHECK
-  PACKING
-  READY
-  OUT_FOR_DELIVERY
-  PARTIALLY_DELIVERED
-  DELIVERED
-  CANCELLED
-  REFUNDED
-  ON_HOLD
-}
-
-enum GarmentStatus {
-  RECEIVED
-  SORTING
-  SORTED
-  WASHING
-  WASHED
-  DRYING
-  DRIED
-  IRONING
-  IRONED
-  QC_PENDING
-  QC_PASSED
-  QC_FAILED
-  REWASH
-  REWORK
-  PACKING
-  PACKED
-  READY
-  OUT_FOR_DELIVERY
-  DELIVERED
-  LOST
-  DAMAGED
-  RETURNED
-}
-
-enum ProcessingStage {
-  RECEIVING
-  SORTING
-  WASHING
-  DRYING
-  IRONING
-  QUALITY_CHECK
-  PACKING
-  DISPATCH
-}
-
-enum TaskStatus {
-  PENDING
-  IN_PROGRESS
-  COMPLETED
-  PASSED
-  FAILED
-  REWASH
-  REWORK
-  SKIPPED
-}
-
-enum PricingMode {
-  PER_PIECE
-  PER_KG
-  FLAT
-}
-
-enum PaymentStatus {
-  UNPAID
-  PARTIALLY_PAID
-  PAID
-  REFUNDED
-  PARTIALLY_REFUNDED
-  OVERDUE
-}
-
-enum PaymentMethod {
-  CASH
-  UPI
-  CARD
-  ONLINE
-  BANK_TRANSFER
-  CREDIT
+enum CustomerType {
+  RETAIL
+  BUSINESS
+  DEALER
+  CORPORATE
   OTHER
 }
 
-enum PaymentProvider {
-  MANUAL
-  RAZORPAY
-  UPI_INTENT
-  CARD_TERMINAL
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
 }
 
-enum PaymentState {
-  PENDING
-  AUTHORIZED
-  CAPTURED
-  FAILED
-  REFUNDED
+enum SerialStatus {
+  IN_STOCK
+  SOLD
+  RETURNED
+  DAMAGED
+  WARRANTY
+}
+
+enum SerialEventType {
+  PURCHASE_IN
+  STOCK_IN
+  SOLD
+  SALE_RETURNED
+  PURCHASE_RETURNED
+  TRANSFERRED_OUT
+  TRANSFERRED_IN
+  ADJUSTED
+  DAMAGED
+  WARRANTY_CLAIMED
+  WARRANTY_REPLACED
+}
+
+enum StockTxnType {
+  OPENING
+  PURCHASE_IN
+  SALE_OUT
+  SALE_RETURN_IN
+  PURCHASE_RETURN_OUT
+  TRANSFER_OUT
+  TRANSFER_IN
+  ADJUST_IN
+  ADJUST_OUT
+  DAMAGE_OUT
+}
+
+enum StockAdjustmentType {
+  INCREASE
+  DECREASE
+  DAMAGE
+  LOST
+  CORRECTION
+}
+
+enum StockTransferStatus {
+  DRAFT
+  REQUESTED
+  APPROVED
+  IN_TRANSIT
+  RECEIVED
   CANCELLED
 }
 
-enum InvoiceType {
-  ORDER
-  B2B_MONTHLY
+enum QuotationStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+  CONVERTED
+}
+
+enum SalesOrderStatus {
+  DRAFT
+  CONFIRMED
+  INVOICED
+  CANCELLED
+}
+
+enum InvoiceKind {
+  TAX_INVOICE
+  NON_GST_BILL
 }
 
 enum InvoiceStatus {
-  DRAFT
   ISSUED
   PARTIALLY_PAID
   PAID
-  OVERDUE
   CANCELLED
 }
 
-enum RefundStatus {
-  REQUESTED
-  APPROVED
-  PROCESSED
-  REJECTED
-}
-
-enum PickupStatus {
-  REQUESTED
-  DRIVER_ASSIGNED
-  DRIVER_ACCEPTED
-  PICKED_UP
-  RECEIVED_AT_LAUNDRY
-  FAILED
-  CANCELLED
-}
-
-enum DeliveryStatus {
+enum SalesReturnStatus {
   PENDING
-  DRIVER_ASSIGNED
-  OUT_FOR_DELIVERY
-  DELIVERED
-  FAILED
-  RESCHEDULED
-  CANCELLED
-}
-
-enum ChallanStatus {
-  DRAFT
-  GENERATED
-  READY_FOR_DELIVERY
-  PARTIALLY_DELIVERED
-  DELIVERED
-  CANCELLED
-}
-
-
-enum InventoryCategory {
-  DETERGENT
-  BLEACH
-  FABRIC_SOFTENER
-  STAIN_REMOVER
-  CHEMICAL
-  PACKAGING
-  HANGER
-  COVER
-  TAG
-  LABEL
-  OTHER
-}
-
-enum InventoryTxnType {
-  STOCK_IN
-  STOCK_OUT
-  TRANSFER_IN
-  TRANSFER_OUT
-  ADJUSTMENT
-  CONSUMPTION
-  RETURN
-  WASTAGE
+  APPROVED
+  REJECTED
 }
 
 enum PurchaseOrderStatus {
@@ -245,145 +161,61 @@ enum PurchaseOrderStatus {
   PARTIALLY_RECEIVED
   RECEIVED
   CANCELLED
-  CLOSED
 }
 
 enum PurchaseInvoiceStatus {
   UNPAID
   PARTIALLY_PAID
   PAID
-  OVERDUE
   CANCELLED
 }
 
-enum B2BAccountType {
-  HOTEL
-  HOSPITAL
-  HOSTEL
-  RESTAURANT
-  SALON
-  GYM
-  CORPORATE
+enum PaymentDirection {
+  CUSTOMER_IN
+  SUPPLIER_OUT
+  REFUND_OUT
+}
+
+enum PaymentStatus {
+  PAID
+  PARTIAL
+  PENDING
+  OVERDUE
+}
+
+enum PaymentMethod {
+  CASH
+  UPI
+  CARD
+  BANK_TRANSFER
+  CHEQUE
   OTHER
 }
 
-enum ContractStatus {
-  DRAFT
+enum WarrantyStatus {
   ACTIVE
   EXPIRED
-  TERMINATED
+  CLAIMED
+  REPLACED
 }
 
-enum BillingCycle {
-  WEEKLY
-  FORTNIGHTLY
-  MONTHLY
-}
-
-enum ScheduleType {
-  PICKUP
-  DELIVERY
-}
-
-enum ComplaintType {
-  DAMAGED_GARMENT
-  LOST_GARMENT
-  MISSING_GARMENT
-  COLOR_FADING
-  STAIN_NOT_REMOVED
-  WRONG_GARMENT
-  WRONG_QUANTITY
-  LATE_DELIVERY
-  OTHER
-}
-
-enum ComplaintStatus {
-  OPEN
-  UNDER_INVESTIGATION
-  AWAITING_CUSTOMER
-  RESOLVED
-  REJECTED
-  CLOSED
-}
-
-enum ComplaintPriority {
-  LOW
-  MEDIUM
-  HIGH
-  CRITICAL
-}
-
-enum ComplaintResolution {
-  REFUND
-  REWASH
-  REWORK
-  COMPENSATION
-  REPLACEMENT
-  APOLOGY
-  NO_ACTION
-}
-
-enum NotificationChannel {
-  IN_APP
-  EMAIL
-}
-
-enum NotificationEvent {
-  ORDER_RECEIVED
-  PROCESSING_STARTED
-  ORDER_READY
-  OUT_FOR_DELIVERY
-  DELIVERED
-  PAYMENT_RECEIVED
-  PAYMENT_REMINDER
-  ORDER_DELAYED
-  PICKUP_SCHEDULED
-  COMPLAINT_REGISTERED
-  COMPLAINT_RESOLVED
-}
-
-enum NotificationStatus {
-  PENDING
-  QUEUED
-  SENT
-  DELIVERED
-  READ
-  FAILED
-}
-
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
-  HALF_DAY
-  LEAVE
-  WEEKLY_OFF
-  HOLIDAY
-}
-
-enum LeaveType {
-  CASUAL
-  SICK
-  EARNED
-  UNPAID
-  MATERNITY
-}
-
-enum LeaveStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
+enum WarrantyType {
+  STANDARD
+  EXTENDED
+  MANUFACTURER
+  SELLER
 }
 
 enum ExpenseCategory {
   RENT
+  ELECTRICITY
+  INTERNET
   SALARY
-  UTILITIES
-  MAINTENANCE
   TRANSPORT
-  CONSUMABLES
+  OFFICE
   MARKETING
-  MISCELLANEOUS
+  MAINTENANCE
+  OTHER
 }
 
 enum ExpenseStatus {
@@ -393,59 +225,113 @@ enum ExpenseStatus {
   PAID
 }
 
+enum AuditAction {
+  LOGIN
+  LOGIN_FAILED
+  LOGOUT
+  ACCESS_CODE_USED
+  ACCESS_CODE_FAILED
+  ACCESS_CODE_CREATED
+  ACCESS_CODE_UPDATED
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_DELETED
+  STOCK_ADJUSTED
+  STOCK_TRANSFERRED
+  PURCHASE_CREATED
+  PURCHASE_RECEIVED
+  PURCHASE_RETURNED
+  SALE_CREATED
+  SALE_RETURNED
+  INVOICE_CREATED
+  INVOICE_CANCELLED
+  PAYMENT_CREATED
+  QUOTATION_CREATED
+  QUOTATION_CONVERTED
+  CUSTOMER_CREATED
+  SUPPLIER_CREATED
+  USER_CREATED
+  USER_UPDATED
+  USER_PERMISSION_CHANGED
+  FIRM_UPDATED
+  WARRANTY_CLAIMED
+  EXPENSE_CREATED
+  SETTING_UPDATED
+}
+
+enum WhatsAppMessageType {
+  INVOICE
+  QUOTATION
+  PAYMENT_REMINDER
+  CUSTOM
+}
+
 // ============================================================================
 // ORGANISATION, IDENTITY & ACCESS CONTROL
 // ============================================================================
 
-/// A tenant. Every business-data row in the system belongs to exactly one
-/// Firm (directly, or transitively through a Branch that does) — this is
-/// the hard boundary a PLATFORM_ADMIN operates above and every other role
-/// operates strictly inside.
+/// A tenant. Every business-data row in the system belongs to exactly one Firm.
 model Firm {
-  id          String     @id @default(cuid())
-  code        String     @unique
-  name        String
-  legalName   String?
-  addressLine String?
-  city        String?
-  state       String?
-  pincode     String?
-  phone       String?
-  email       String?
-  gstin       String?
-  pan         String?
-  website     String?
-  logoUrl     String?
-  status      FirmStatus @default(ACTIVE)
+  id              String     @id @default(cuid())
+  code            String     @unique
+  /// Legal entity name, e.g. "Technic Technologies Pvt Ltd".
+  name            String
+  legalName       String?
+  /// The trading name shown on screens and documents.
+  displayName     String?
+  gstin           String?
+  pan             String?
+  addressLine     String?
+  city            String?
+  state           String?
+  /// State name used to decide CGST+SGST vs IGST at invoice time.
+  stateCode       String?
+  pincode         String?
+  country         String     @default("India")
+  phone           String?
+  email           String?
+  website         String?
+  logoUrl         String?
+  invoicePrefix   String     @default("INV")
+  quotationPrefix String     @default("QT")
+  purchasePrefix  String     @default("PO")
+  currency        String     @default("INR")
+  /// e.g. "26-27" — drives document numbering reset rules.
+  financialYear   String     @default("26-27")
+  status          FirmStatus @default(ACTIVE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   branches          Branch[]
   users             User[]
+  accessCodes       AccessCode[]
   auditLogs         AuditLog[]
   settings          Setting[]
-  services          Service[]
-  garmentTypes      GarmentType[]
-  orders            Order[]
-  garments          Garment[]
-  invoices          Invoice[]
-  payments          Payment[]
-  deliveries        Delivery[]
-  deliveryChallans  DeliveryChallan[]
-  inventoryItems    InventoryItem[]
-  suppliers         Supplier[]
-  purchaseOrders    PurchaseOrder[]
-  b2bAccounts       B2BAccount[]
-  complaints        Complaint[]
-  expenses          Expense[]
+  documentSequences DocumentSequence[]
+  categories        Category[]
+  brands            Brand[]
+  products          Product[]
+  serialUnits       SerialUnit[]
+  stockTransactions StockTransaction[]
+  stockAdjustments  StockAdjustment[]
+  stockTransfers    StockTransfer[]
   customers         Customer[]
-  scanEvents        ScanEvent[]
-  bankAccounts      BankAccount[]
-  financialLedgers  FinancialLedger[]
-  cashTransactions  CashTransaction[]
-  whatsAppTemplates WhatsAppTemplate[]
-  whatsAppSessions  WhatsAppSession[]
+  suppliers         Supplier[]
+  quotations        Quotation[]
+  salesOrders       SalesOrder[]
+  invoices          Invoice[]
+  salesReturns      SalesReturn[]
+  payments          Payment[]
+  purchaseOrders    PurchaseOrder[]
+  goodsReceipts     GoodsReceipt[]
+  purchaseInvoices  PurchaseInvoice[]
+  supplierPayments  SupplierPayment[]
+  purchaseReturns   PurchaseReturn[]
+  expenses          Expense[]
+  warranties        Warranty[]
+  whatsappLogs      WhatsAppLog[]
+  whatsappTemplates WhatsAppTemplate[]
 
   @@index([status])
   @@map("firms")
@@ -453,141 +339,128 @@ model Firm {
 
 model Branch {
   firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id       String     @id @default(cuid())
-  code     String
-  name     String
-  type     BranchType @default(BRANCH)
-  parentId String?
-  parent   Branch?    @relation("BranchHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children Branch[]   @relation("BranchHierarchy")
+  firm   Firm       @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id     String     @id @default(cuid())
+  code   String
+  name   String
+  type   BranchType @default(BRANCH)
 
   addressLine String?
   city        String?
   state       String?
+  stateCode   String?
   pincode     String?
   phone       String?
   email       String?
-  gstNumber   String?
+  gstin       String?
 
-  openingTime String?
-  closingTime String?
-  isActive    Boolean @default(true)
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  users                 User[]
-  orders                Order[]
-  garments              Garment[]
-  processingTasks       ProcessingTask[]
-  processingBatches     ProcessingBatch[]
-  invoices              Invoice[]
-  payments              Payment[]
-  pickups               Pickup[]
-  deliveries            Delivery[]
-  deliveryChallans      DeliveryChallan[]
-  inventoryStocks       InventoryStock[]
-  inventoryTransactions InventoryTransaction[]
-  purchaseOrders        PurchaseOrder[]
-  goodsReceipts         GoodsReceipt[]
-  purchaseReturns       PurchaseReturn[]
-  complaints            Complaint[]
-  expenses              Expense[]
-  b2bAccounts           B2BAccount[]
-  attendances           Attendance[]
-  shifts                Shift[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  garmentHistory        GarmentStatusHistory[]
-  customers             Customer[]
-  scanEvents            ScanEvent[]
-  garmentScans          GarmentScan[]
-  garmentExceptions     GarmentException[]
-  bankAccounts          BankAccount[]
-  cashAccount           CashAccount?
-  financialLedgers      FinancialLedger[]
-  bankTransactions      BankTransaction[]
-  cashTransactions      CashTransaction[]
-  reconciliations       Reconciliation[]
+  users             User[]
+  products          Product[]
+  serialUnits       SerialUnit[]
+  stockTransactions StockTransaction[]
+  stockAdjustments  StockAdjustment[]
+  warranties        Warranty[]
+  customers         Customer[]
+  quotations        Quotation[]
+  salesOrders       SalesOrder[]
+  invoices          Invoice[]
+  salesReturns      SalesReturn[]
+  payments          Payment[]
+  purchaseOrders    PurchaseOrder[]
+  goodsReceipts     GoodsReceipt[]
+  purchaseInvoices  PurchaseInvoice[]
+  supplierPayments  SupplierPayment[]
+  purchaseReturns   PurchaseReturn[]
+  expenses          Expense[]
+  stockTransfersOut StockTransfer[]    @relation("StockTransferFrom")
+  stockTransfersIn  StockTransfer[]    @relation("StockTransferTo")
+  auditLogs         AuditLog[]
 
-  @@index([parentId])
-  @@index([isActive])
   @@unique([firmId, code])
+  @@index([isActive])
   @@index([firmId])
   @@map("branches")
 }
 
 model User {
-  firmId String?
-  firm   Firm?  @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  firmId       String?
+  firm         Firm?      @relation(fields: [firmId], references: [id], onDelete: SetNull)
   id           String     @id @default(cuid())
-  employeeCode String?    @unique
+  employeeCode String?
   name         String
   email        String     @unique
   phone        String?
   /// The single credential used to sign in — a short code entered on the
-  /// access-code screen instead of an email/password pair.
+  /// login screen instead of an email/password pair.
   accessCode   String     @unique
-  role         UserRole   @default(SCANNER)
+  role         UserRole   @default(VIEWER)
   status       UserStatus @default(ACTIVE)
   branchId     String?
   branch       Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  image         String?
-  emailVerified DateTime?
-  lastLoginAt   DateTime?
+  image       String?
+  lastLoginAt DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  accounts     Account[]
-  sessions     Session[]
-  permissions  UserPermission[]
-  staffProfile StaffProfile?
-  driver       Driver?
-
-  createdOrders        Order[]                  @relation("OrderCreatedBy")
-  garmentScans         Garment[]                @relation("GarmentLastScannedBy")
-  garmentHistory       GarmentStatusHistory[]
-  assignedTasks        ProcessingTask[]         @relation("TaskAssignee")
-  taskHistory          ProcessingHistory[]
-  batches              ProcessingBatch[]        @relation("BatchOperator")
-  paymentsReceived     Payment[]                @relation("PaymentReceivedBy")
-  refundsProcessed     Refund[]                 @relation("RefundProcessedBy")
-  inventoryTxns        InventoryTransaction[]
-  purchaseOrdersMade   PurchaseOrder[]          @relation("PurchaseOrderCreatedBy")
-  goodsReceived        GoodsReceipt[]           @relation("GoodsReceivedBy")
-  supplierPayments     SupplierPayment[]        @relation("SupplierPaymentBy")
-  complaintsAssigned   Complaint[]              @relation("ComplaintAssignee")
-  complaintsCreated    Complaint[]              @relation("ComplaintCreatedBy")
-  complaintsResolved   Complaint[]              @relation("ComplaintResolvedBy")
-  complaintAttachments ComplaintAttachment[]
-  garmentPhotos        GarmentPhoto[]
-  attendances          Attendance[]
-  leaves               Leave[]                  @relation("LeaveUser")
-  leavesApproved       Leave[]                  @relation("LeaveApprover")
-  expensesCreated      Expense[]                @relation("ExpenseCreatedBy")
-  expensesApproved     Expense[]                @relation("ExpenseApprovedBy")
-  auditLogs            AuditLog[]
-  invoicesIssued       Invoice[]                @relation("InvoiceIssuedBy")
-  customersCreated     Customer[]               @relation("CustomerCreatedBy")
-  scanEvents           ScanEvent[]              @relation("ScanEventScannedBy")
-  garmentScanReads     GarmentScan[]            @relation("GarmentScanBy")
-  exceptionsReported   GarmentException[]       @relation("GarmentExceptionReporter")
-  exceptionsResolved   GarmentException[]       @relation("GarmentExceptionResolver")
-  ledgerEntriesCreated FinancialLedger[]        @relation("LedgerCreatedBy")
-  bankTxnsCreated      BankTransaction[]        @relation("BankTxnCreatedBy")
-  cashTxnsCreated      CashTransaction[]        @relation("CashTxnCreatedBy")
-  reconciliationsCreated Reconciliation[]       @relation("ReconciliationCreatedBy")
-  sentWhatsAppLogs     WhatsAppLog[]            @relation("WhatsAppSentBy")
-  createdDeliveryChallans DeliveryChallan[]    @relation("ChallanCreatedBy")
+  permissions             UserPermission[]
+  accounts                Account[]
+  sessions                Session[]
+  invoicesIssued          Invoice[]          @relation("InvoiceIssuedBy")
+  quotationsCreated       Quotation[]        @relation("QuotationCreatedBy")
+  salesOrdersCreated      SalesOrder[]       @relation("SalesOrderCreatedBy")
+  paymentsReceived        Payment[]          @relation("PaymentReceivedBy")
+  adjustmentsMade         StockAdjustment[]
+  stockTxns               StockTransaction[]
+  transfersCreated        StockTransfer[]    @relation("TransferCreatedBy")
+  expensesCreated         Expense[]          @relation("ExpenseCreatedBy")
+  auditLogs               AuditLog[]
+  accessCodesCreated      AccessCode[]       @relation("AccessCodeCreatedBy")
+  salesReturnsCreated     SalesReturn[]      @relation("ReturnCreatedBy")
+  salesReturnsApproved    SalesReturn[]      @relation("ReturnApprovedBy")
+  purchaseOrdersCreated   PurchaseOrder[]    @relation("PurchaseOrderCreatedBy")
+  goodsReceiptsReceived   GoodsReceipt[]     @relation("GoodsReceivedBy")
+  purchaseInvoicesCreated PurchaseInvoice[]  @relation("PurchaseInvoiceCreatedBy")
+  supplierPaymentsPaid    SupplierPayment[]  @relation("SupplierPaymentPaidBy")
+  purchaseReturnsCreated  PurchaseReturn[]   @relation("PurchaseReturnCreatedBy")
+  whatsappLogsSent        WhatsAppLog[]      @relation("WhatsAppSentBy")
+  expensesApproved        Expense[]          @relation("ExpenseApprovedBy")
 
   @@index([branchId])
   @@index([role])
   @@index([status])
   @@index([firmId])
   @@map("users")
+}
+
+/// A GST or NON-GST entry code for a firm. Codes are stored as bcrypt hashes —
+/// never plain text — and validated with constant-work comparisons.
+model AccessCode {
+  id          String         @id @default(cuid())
+  firmId      String
+  firm        Firm           @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  codeHash    String
+  type        AccessCodeType
+  description String?
+  isActive    Boolean        @default(true)
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  useCount    Int            @default(0)
+  createdById String?
+  createdBy   User?          @relation("AccessCodeCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([firmId, type])
+  @@index([firmId, isActive])
+  @@map("access_codes")
 }
 
 model Permission {
@@ -671,14 +544,14 @@ model VerificationToken {
 }
 
 model AuditLog {
-  firmId String?
-  firm   Firm?  @relation(fields: [firmId], references: [id], onDelete: SetNull)
-  id        String   @id @default(cuid())
+  firmId    String?
+  firm      Firm?       @relation(fields: [firmId], references: [id], onDelete: SetNull)
+  id        String      @id @default(cuid())
   userId    String?
-  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user      User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   branchId  String?
-  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  action    String
+  branch    Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  action    AuditAction
   entity    String
   entityId  String?
   summary   String?
@@ -686,7 +559,7 @@ model AuditLog {
   after     Json?
   ipAddress String?
   userAgent String?
-  createdAt DateTime @default(now())
+  createdAt DateTime    @default(now())
 
   @@index([entity, entityId])
   @@index([userId])
@@ -695,17 +568,28 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-model Sequence {
-  key       String   @id
-  value     Int      @default(0)
+/// Per-firm, per-document-type, per-financial-year counters. GST and NON-GST
+/// invoices count on separate keys so the two sequences can never collide.
+model DocumentSequence {
+  id            String  @id @default(cuid())
+  firmId        String
+  firm          Firm    @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  documentType  String // invoice | quotation | sales_order | purchase_order | purchase_invoice | sales_return | purchase_return | payment | credit_note | debit_note | stock_transfer | expense | customer | supplier
+  accessMode    TaxMode @default(NON_GST)
+  financialYear String  @default("26-27")
+  prefix        String?
+  value         Int     @default(0)
+
   updatedAt DateTime @updatedAt
 
-  @@map("sequences")
+  @@unique([firmId, documentType, accessMode, financialYear])
+  @@index([firmId])
+  @@map("document_sequences")
 }
 
 model Setting {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  firmId    String
+  firm      Firm     @relation(fields: [firmId], references: [id], onDelete: Restrict)
   key       String
   value     String
   category  String   @default("general")
@@ -717,953 +601,780 @@ model Setting {
 }
 
 // ============================================================================
-// STAFF
+// CATALOGUE — CATEGORIES, BRANDS, PRODUCTS
 // ============================================================================
 
-model StaffProfile {
-  id               String    @id @default(cuid())
-  userId           String    @unique
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  department       String?
-  designation      String?
-  dateOfJoining    DateTime?
-  monthlySalary    Decimal?  @db.Decimal(12, 2)
-  emergencyContact String?
-  addressLine      String?
-  idProofType      String?
-  idProofNumber    String?
-  shiftId          String?
-  shift            Shift?    @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  notes            String?
+model Category {
+  firmId      String
+  firm        Firm       @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id          String     @id @default(cuid())
+  name        String
+  parentId    String?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children    Category[] @relation("CategoryHierarchy")
+  description String?
+  isActive    Boolean    @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([shiftId])
-  @@map("staff_profiles")
+  products Product[]
+
+  @@unique([firmId, name])
+  @@index([firmId, isActive])
+  @@map("categories")
 }
 
-model Shift {
-  id        String   @id @default(cuid())
-  name      String
-  branchId  String?
-  branch    Branch?  @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  startTime String
-  endTime   String
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  staffProfiles StaffProfile[]
-  attendances   Attendance[]
-
-  @@index([branchId])
-  @@map("shifts")
-}
-
-model Attendance {
-  id       String           @id @default(cuid())
-  userId   String
-  user     User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branchId String?
-  branch   Branch?          @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  date     DateTime         @db.Date
-  status   AttendanceStatus @default(PRESENT)
-  checkIn  DateTime?
-  checkOut DateTime?
-  shiftId  String?
-  shift    Shift?           @relation(fields: [shiftId], references: [id], onDelete: SetNull)
-  notes    String?
+model Brand {
+  firmId   String
+  firm     Firm    @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id       String  @id @default(cuid())
+  name     String
+  isActive Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([userId, date])
-  @@index([branchId, date])
-  @@map("attendances")
+  products Product[]
+
+  @@unique([firmId, name])
+  @@index([firmId])
+  @@map("brands")
 }
 
-model Leave {
-  id           String      @id @default(cuid())
-  userId       String
-  user         User        @relation("LeaveUser", fields: [userId], references: [id], onDelete: Cascade)
-  type         LeaveType   @default(CASUAL)
-  fromDate     DateTime    @db.Date
-  toDate       DateTime    @db.Date
-  reason       String?
-  status       LeaveStatus @default(PENDING)
-  approvedById String?
-  approvedBy   User?       @relation("LeaveApprover", fields: [approvedById], references: [id], onDelete: SetNull)
-  decidedAt    DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@map("leaves")
-}
-
-model Driver {
-  id            String  @id @default(cuid())
-  userId        String  @unique
-  user          User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  licenseNumber String?
-  vehicleNumber String?
-  vehicleType   String?
-  isAvailable   Boolean @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  pickups    Pickup[]
-  deliveries Delivery[]
-
-  @@map("drivers")
-}
-
-// ============================================================================
-// CATALOGUE — SERVICES & GARMENT TYPES
-// ============================================================================
-
-model Service {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id              String            @id @default(cuid())
-  code            String
+/// Electronics product master. Electronics categories vary, so the spec forbids
+/// hardcoding spec attributes — those live in ProductAttribute rows instead.
+model Product {
+  firmId          String
+  firm            Firm          @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id              String        @id @default(cuid())
   name            String
+  brandId         String?
+  brand           Brand?        @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  categoryId      String?
+  category        Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  subcategory     String?
+  sku             String
+  barcode         String?
+  modelNumber     String?
+  partNumber      String?
+  hsnCode         String?
+  gstRate         Decimal       @default(18) @db.Decimal(5, 2)
+  unit            String        @default("pcs")
+  purchasePrice   Decimal       @default(0) @db.Decimal(12, 2)
+  sellingPrice    Decimal       @default(0) @db.Decimal(12, 2)
+  mrp             Decimal       @default(0) @db.Decimal(12, 2)
+  minSellingPrice Decimal       @default(0) @db.Decimal(12, 2)
+  /// Warranty months granted on sale; 0 = no warranty.
+  warrantyMonths  Int           @default(0)
+  warrantyType    WarrantyType  @default(STANDARD)
   description     String?
-  pricingMode     PricingMode       @default(PER_PIECE)
-  basePrice       Decimal           @db.Decimal(12, 2)
-  turnaroundHours Int               @default(48)
-  stages          ProcessingStage[]
-  isActive        Boolean           @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  rates      ServiceRate[]
-  orderItems OrderItem[]
-  garments   Garment[]
-  rateCards  B2BRateCard[]
-
-  @@index([isActive])
-  @@unique([firmId, code])
-  @@index([firmId])
-  @@map("services")
-}
-
-model GarmentType {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id               String           @id @default(cuid())
-  code             String
-  name             String
-  /// Loose merchandising grouping, kept for the catalogue screens.
-  category         String           @default("GENERAL")
-  /// The tracking bucket the shop floor counts in. Drives the garment id
-  /// prefix, the dashboard tiles and the mismatch centre.
-  trackingCategory TrackingCategory @default(OTHER)
-  defaultWeightKg  Decimal?         @db.Decimal(8, 3)
-  icon             String?
-  isActive         Boolean          @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  rates      ServiceRate[]
-  orderItems OrderItem[]
-  garments   Garment[]
-  rateCards  B2BRateCard[]
-
-  @@index([isActive])
-  @@index([trackingCategory])
-  @@unique([firmId, code])
-  @@index([firmId])
-  @@map("garment_types")
-}
-
-model ServiceRate {
-  id            String      @id @default(cuid())
-  serviceId     String
-  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
-  garmentTypeId String
-  garmentType   GarmentType @relation(fields: [garmentTypeId], references: [id], onDelete: Cascade)
-  price         Decimal     @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([serviceId, garmentTypeId])
-  @@index([serviceId])
-  @@map("service_rates")
-}
-
-// ============================================================================
-// ORDERS
-// ============================================================================
-
-model Order {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id            String        @id @default(cuid())
-  orderNumber   String        @unique
-  branchId      String
-  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  type          OrderType     @default(WALK_IN)
-  priority      OrderPriority @default(NORMAL)
-  status        OrderStatus   @default(RECEIVED)
-  paymentStatus PaymentStatus @default(UNPAID)
-
-  // Customer details are captured on the order itself (billing / pickup / delivery).
-  customerName  String
-  customerPhone String
-  customerEmail String?
-  addressLine   String?
-  city          String?
-  pincode       String?
-  landmark      String?
-
-  // The order keeps its own copy of the details above so an invoice never
-  // changes when a customer record is later edited; the link is for history.
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  b2bAccountId String?
-  b2bAccount   B2BAccount? @relation(fields: [b2bAccountId], references: [id], onDelete: SetNull)
-
-  placedAt           DateTime  @default(now())
-  expectedDeliveryAt DateTime
-  readyAt            DateTime?
-  deliveredAt        DateTime?
-  cancelledAt        DateTime?
-  cancellationReason String?
-
-  subtotal          Decimal @default(0) @db.Decimal(12, 2)
-  discountAmount    Decimal @default(0) @db.Decimal(12, 2)
-  discountReason    String?
-  taxableAmount     Decimal @default(0) @db.Decimal(12, 2)
-  gstRate           Decimal @default(18) @db.Decimal(5, 2)
-  gstAmount         Decimal @default(0) @db.Decimal(12, 2)
-  totalAmount       Decimal @default(0) @db.Decimal(12, 2)
-  paidAmount        Decimal @default(0) @db.Decimal(12, 2)
-  outstandingAmount Decimal @default(0) @db.Decimal(12, 2)
-  refundedAmount    Decimal @default(0) @db.Decimal(12, 2)
-
-  totalPieces   Int     @default(0)
-  totalWeightKg Decimal @default(0) @db.Decimal(10, 3)
-
-  specialInstructions String?
-  stainNotes          String?
-  damageNotes         String?
-
-  tagPrintCount    Int       @default(0)
-  tagLastPrintedAt DateTime?
+  imageUrl        String?
+  status          ProductStatus @default(ACTIVE)
+  /// Whether sales must specify individual serial numbers / IMEIs.
+  trackSerials    Boolean       @default(false)
+  /// Whether the product tracks IMEI1/IMEI2 in addition to a serial.
+  trackImei       Boolean       @default(false)
+  lowStockQty     Int           @default(0)
+  branchId        String?
+  branch          Branch?       @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
   createdById String?
-  createdBy   User?   @relation("OrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  attributes           ProductAttribute[]
+  variants             ProductVariant[]
+  serialUnits          SerialUnit[]
+  stockTxns            StockTransaction[]
+  quotationLines       QuotationLine[]
+  orderLines           SalesOrderLine[]
+  invoiceLines         InvoiceLine[]
+  purchaseLines        PurchaseOrderLine[]
+  returnLines          SalesReturnLine[]
+  warrantyRecords      Warranty[]
+  stockTransferLines   StockTransferLine[]
+  stockAdjustments     StockAdjustment[]
+  goodsReceiptLines    GoodsReceiptLine[]
+  purchaseInvoiceLines PurchaseInvoiceLine[]
+  purchaseReturnLines  PurchaseReturnLine[]
+
+  @@unique([firmId, sku])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([barcode])
+  @@index([status])
+  @@index([name])
+  @@index([firmId, categoryId, status])
+  @@map("products")
+}
+
+/// Flexible spec attributes — "Capacity: 1TB", "RAM: 16GB", "Voltage: 230V" —
+/// so no electronics category ever needs its own hardcoded column.
+model ProductAttribute {
+  id        String  @id @default(cuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name      String
+  value     String
+
+  @@unique([productId, name])
+  @@index([productId])
+  @@map("product_attributes")
+}
+
+/// A purchasable/sellable variant of a product, e.g. Samsung SSD 500GB/1TB/2TB.
+model ProductVariant {
+  id             String  @id @default(cuid())
+  productId      String
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  name           String
+  sku            String
+  barcode        String?
+  purchasePrice  Decimal @default(0) @db.Decimal(12, 2)
+  sellingPrice   Decimal @default(0) @db.Decimal(12, 2)
+  mrp            Decimal @default(0) @db.Decimal(12, 2)
+  warrantyMonths Int     @default(0)
+  isActive       Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items         OrderItem[]
-  garments      Garment[]
-  statusHistory OrderStatusHistory[]
-  invoices      Invoice[]
-  payments      Payment[]
-  refunds       Refund[]
-  pickups       Pickup[]
-  deliveries    Delivery[]
-  deliveryChallans DeliveryChallan[]
-  complaints    Complaint[]
-  notifications Notification[]
-  invoiceLines  InvoiceLine[]
-  scanEvents    ScanEvent[]
-  garmentScans  GarmentScan[]
-  contextScans  GarmentScan[]        @relation("GarmentScanContext")
-  whatsAppLogs  WhatsAppLog[]
+  serialUnits          SerialUnit[]
+  stockTxns            StockTransaction[]
+  invoiceLines         InvoiceLine[]
+  quotationLines       QuotationLine[]
+  orderLines           SalesOrderLine[]
+  purchaseLines        PurchaseOrderLine[]
+  stockAdjustments     StockAdjustment[]
+  stockTransferLines   StockTransferLine[]
+  salesReturnLines     SalesReturnLine[]
+  goodsReceiptLines    GoodsReceiptLine[]
+  purchaseInvoiceLines PurchaseInvoiceLine[]
+  purchaseReturnLines  PurchaseReturnLine[]
 
+  @@unique([productId, sku])
+  @@index([barcode])
+  @@index([sku])
+  @@map("product_variants")
+}
+
+// ============================================================================
+// SERIAL / IMEI TRACKING
+// ============================================================================
+
+/// One row per individually tracked unit. Serial numbers are unique per firm.
+model SerialUnit {
+  firmId       String
+  firm         Firm            @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id           String          @id @default(cuid())
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId    String?
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  serialNumber String
+  imei1        String?
+  imei2        String?
+  status       SerialStatus    @default(IN_STOCK)
+  branchId     String
+  branch       Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  purchaseInvoiceId String?
+  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  soldInvoiceId     String?
+  soldInvoice       Invoice?         @relation("SerialSoldInvoice", fields: [soldInvoiceId], references: [id], onDelete: SetNull)
+  soldInvoiceLineId String?
+  soldInvoiceLine   InvoiceLine?     @relation("SerialSoldLine", fields: [soldInvoiceLineId], references: [id], onDelete: SetNull)
+  warrantyRecords   Warranty[]
+
+  purchasePrice Decimal @default(0) @db.Decimal(12, 2)
+  sellingPrice  Decimal @default(0) @db.Decimal(12, 2)
+
+  purchasedAt DateTime?
+  soldAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  history SerialHistory[]
+
+  @@unique([firmId, serialNumber])
+  @@index([productId, status])
   @@index([branchId, status])
-  @@index([customerPhone])
-  @@index([customerId])
-  @@index([placedAt])
-  @@index([expectedDeliveryAt])
-  @@index([paymentStatus])
-  @@index([b2bAccountId])
-  @@index([firmId])
-  @@map("orders")
+  @@index([imei1])
+  @@index([imei2])
+  @@index([firmId, status])
+  @@map("serial_units")
 }
 
-model OrderItem {
-  id            String      @id @default(cuid())
-  orderId       String
-  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  serviceId     String
-  service       Service     @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  garmentTypeId String
-  garmentType   GarmentType @relation(fields: [garmentTypeId], references: [id], onDelete: Restrict)
+/// Append-only lifecycle ledger: Purchase → Stock → Sale → Customer → Warranty.
+model SerialHistory {
+  id           String          @id @default(cuid())
+  serialUnitId String
+  serialUnit   SerialUnit      @relation(fields: [serialUnitId], references: [id], onDelete: Cascade)
+  eventType    SerialEventType
+  fromStatus   SerialStatus?
+  toStatus     SerialStatus
+  reference    String? // document number involved (invoice / PO / return)
+  documentId   String?
+  note         String?
+  userId       String?
+  createdAt    DateTime        @default(now())
 
-  quantity    Int         @default(1)
-  weightKg    Decimal     @default(0) @db.Decimal(10, 3)
-  pricingMode PricingMode @default(PER_PIECE)
-  unitPrice   Decimal     @db.Decimal(12, 2)
-  lineTotal   Decimal     @db.Decimal(12, 2)
-  notes       String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  garments Garment[]
-
-  @@index([orderId])
-  @@index([serviceId])
-  @@map("order_items")
-}
-
-model OrderStatusHistory {
-  id         String       @id @default(cuid())
-  orderId    String
-  order      Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  fromStatus OrderStatus?
-  toStatus   OrderStatus
-  userId     String?
-  userName   String?
-  note       String?
-  createdAt  DateTime     @default(now())
-
-  @@index([orderId, createdAt])
-  @@map("order_status_history")
+  @@index([serialUnitId, createdAt])
+  @@index([eventType])
+  @@map("serial_history")
 }
 
 // ============================================================================
-// GARMENTS — the operational heart of the system
+// INVENTORY — TRANSACTION-DRIVEN STOCK
 // ============================================================================
 
-model Garment {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id           String @id @default(cuid())
-  garmentCode  String @unique
-  qrPayload    String @unique
-  barcodeValue String @unique
+/// The only way stock changes. Every purchase, sale, return, adjustment and
+/// transfer writes rows here; no code path mutates stock silently.
+model StockTransaction {
+  firmId       String
+  firm         Firm            @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id           String          @id @default(cuid())
+  productId    String
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId    String?
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  branchId     String
+  branch       Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  type         StockTxnType
+  /// Signed delta: positive adds to stock, negative removes.
+  quantity     Int
+  balanceAfter Int
+  unitCost     Decimal?        @db.Decimal(12, 2)
+  reference    String? // document number
+  documentType String?
+  documentId   String?
+  notes        String?
+  userId       String?
+  user         User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt    DateTime        @default(now())
 
-  orderId          String
-  order            Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  orderItemId      String?
-  orderItem        OrderItem?       @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
-  garmentTypeId    String
-  garmentType      GarmentType      @relation(fields: [garmentTypeId], references: [id], onDelete: Restrict)
-  /// Copied from the garment type at intake so a later catalogue edit cannot
-  /// move a garment that is already tagged and on the floor.
-  trackingCategory TrackingCategory @default(OTHER)
-  serviceId        String
-  service          Service          @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  @@index([productId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([type])
+  @@index([firmId, createdAt])
+  @@map("stock_transactions")
+}
 
+/// Audit row for manual adjustments — Increase / Decrease / Damage / Lost /
+/// Correction, each with reason, user, date and reference.
+model StockAdjustment {
+  firmId           String
+  firm             Firm                @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id               String              @id @default(cuid())
+  adjustmentNumber String              @unique
+  branchId         String
+  branch           Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  type             StockAdjustmentType
+  reason           String
+  reference        String?
+  productId        String
+  product          Product             @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId        String?
+  variant          ProductVariant?     @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quantity         Int
+  unitCost         Decimal?            @db.Decimal(12, 2)
+  createdById      String?
+  createdBy        User?               @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime            @default(now())
+
+  @@index([branchId, createdAt])
+  @@index([productId])
+  @@index([firmId, createdAt])
+  @@map("stock_adjustments")
+}
+
+model StockTransfer {
+  firmId         String
+  firm           Firm                @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id             String              @id @default(cuid())
+  transferNumber String              @unique
+  fromBranchId   String
+  fromBranch     Branch              @relation("StockTransferFrom", fields: [fromBranchId], references: [id], onDelete: Restrict)
+  toBranchId     String
+  toBranch       Branch              @relation("StockTransferTo", fields: [toBranchId], references: [id], onDelete: Restrict)
+  status         StockTransferStatus @default(DRAFT)
+  notes          String?
+  dispatchNote   String?
+  receivedNote   String?
+  createdById    String?
+  createdBy      User?               @relation("TransferCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  dispatchedAt   DateTime?
+  receivedAt     DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  lines StockTransferLine[]
+
+  @@index([fromBranchId, status])
+  @@index([toBranchId, status])
+  @@index([firmId, status])
+  @@map("stock_transfers")
+}
+
+model StockTransferLine {
+  id            String          @id @default(cuid())
+  transferId    String
+  transfer      StockTransfer   @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quantity      Int
+  serialNumbers String? // newline-separated serials for tracked products
+
+  @@index([transferId])
+  @@index([productId])
+  @@map("stock_transfer_lines")
+}
+
+// ============================================================================
+// PARTNERS — CUSTOMERS & SUPPLIERS
+// ============================================================================
+
+model Customer {
+  firmId   String
+  firm     Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id       String @id @default(cuid())
+  code     String @unique
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
-  status       GarmentStatus   @default(RECEIVED)
-  currentStage ProcessingStage @default(RECEIVING)
-
-  color       String?
-  brand       String?
-  size        String?
-  fabric      String?
-  stainNotes  String?
-  damageNotes String?
-  rewashCount Int     @default(0)
-  reworkCount Int     @default(0)
-
-  lastScannedAt   DateTime?
-  lastScannedById String?
-  lastScannedBy   User?     @relation("GarmentLastScannedBy", fields: [lastScannedById], references: [id], onDelete: SetNull)
-
-  deliveredAt DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  statusHistory   GarmentStatusHistory[]
-  tasks           ProcessingTask[]
-  photos          GarmentPhoto[]
-  complaints      Complaint[]
-  scans           GarmentScan[]
-  exceptions      GarmentException[]
-  challanItems    DeliveryChallanItem[]
-
-  @@index([orderId])
-  @@index([branchId, status])
-  @@index([currentStage])
-  @@index([garmentTypeId])
-  @@index([branchId, trackingCategory, status])
-  @@index([firmId])
-  @@map("garments")
-}
-
-/// Immutable ledger — rows are only ever inserted, never updated or deleted.
-model GarmentStatusHistory {
-  id         String          @id @default(cuid())
-  garmentId  String
-  garment    Garment         @relation(fields: [garmentId], references: [id], onDelete: Cascade)
-  fromStatus GarmentStatus?
-  toStatus   GarmentStatus
-  stage      ProcessingStage
-  branchId   String?
-  branch     Branch?         @relation(fields: [branchId], references: [id], onDelete: SetNull)
-  userId     String?
-  user       User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userName   String?
-  note       String?
-  scannedVia String?
-  createdAt  DateTime        @default(now())
-
-  @@index([garmentId, createdAt])
-  @@index([createdAt])
-  @@map("garment_status_history")
-}
-
-model GarmentPhoto {
-  id           String   @id @default(cuid())
-  garmentId    String
-  garment      Garment  @relation(fields: [garmentId], references: [id], onDelete: Cascade)
-  url          String
-  storageKey   String
-  mimeType     String?
-  sizeBytes    Int?
-  kind         String   @default("INTAKE")
-  caption      String?
-  uploadedById String?
-  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime @default(now())
-
-  @@index([garmentId])
-  @@map("garment_photos")
-}
-
-// ============================================================================
-// PROCESSING
-// ============================================================================
-
-model ProcessingBatch {
-  id          String          @id @default(cuid())
-  batchCode   String          @unique
-  stage       ProcessingStage
-  branchId    String
-  branch      Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  status      TaskStatus      @default(PENDING)
-  operatorId  String?
-  operator    User?           @relation("BatchOperator", fields: [operatorId], references: [id], onDelete: SetNull)
-  startedAt   DateTime?
-  completedAt DateTime?
-  notes       String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  tasks ProcessingTask[]
-
-  @@index([branchId, stage, status])
-  @@map("processing_batches")
-}
-
-model ProcessingTask {
-  id        String          @id @default(cuid())
-  garmentId String
-  garment   Garment         @relation(fields: [garmentId], references: [id], onDelete: Cascade)
-  stage     ProcessingStage
-  status    TaskStatus      @default(PENDING)
-  branchId  String
-  branch    Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
-
-  assignedToId String?
-  assignedTo   User?   @relation("TaskAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-
-  batchId String?
-  batch   ProcessingBatch? @relation(fields: [batchId], references: [id], onDelete: SetNull)
-
-  sequence        Int       @default(0)
-  startedAt       DateTime?
-  completedAt     DateTime?
-  durationSeconds Int?
-  failureReason   String?
-  notes           String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  history ProcessingHistory[]
-
-  @@unique([garmentId, stage])
-  @@index([branchId, stage, status])
-  @@index([assignedToId])
-  @@index([batchId])
-  @@map("processing_tasks")
-}
-
-model ProcessingHistory {
-  id         String         @id @default(cuid())
-  taskId     String
-  task       ProcessingTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
-  fromStatus TaskStatus?
-  toStatus   TaskStatus
-  userId     String?
-  user       User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  userName   String?
-  note       String?
-  createdAt  DateTime       @default(now())
-
-  @@index([taskId, createdAt])
-  @@map("processing_history")
-}
-
-// ============================================================================
-// BILLING & PAYMENTS
-// ============================================================================
-
-model Invoice {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id            String        @id @default(cuid())
-  invoiceNumber String        @unique
-  type          InvoiceType   @default(ORDER)
-  status        InvoiceStatus @default(ISSUED)
-  branchId      String
-  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-
-  orderId String?
-  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
-
-  // The order keeps its own copy of the details above so an invoice never
-  // changes when a customer record is later edited; the link is for history.
-  customerId String?
-  customer   Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  b2bAccountId String?
-  b2bAccount   B2BAccount? @relation(fields: [b2bAccountId], references: [id], onDelete: SetNull)
-  periodStart  DateTime?
-  periodEnd    DateTime?
-
-  billToName    String
-  billToPhone   String?
-  billToEmail   String?
-  billToAddress String?
-  billToGstin   String?
-
-  subtotal       Decimal @default(0) @db.Decimal(12, 2)
-  discountAmount Decimal @default(0) @db.Decimal(12, 2)
-  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
-  gstRate        Decimal @default(18) @db.Decimal(5, 2)
-  cgstAmount     Decimal @default(0) @db.Decimal(12, 2)
-  sgstAmount     Decimal @default(0) @db.Decimal(12, 2)
-  igstAmount     Decimal @default(0) @db.Decimal(12, 2)
-  totalAmount    Decimal @default(0) @db.Decimal(12, 2)
-  amountPaid     Decimal @default(0) @db.Decimal(12, 2)
-  amountDue      Decimal @default(0) @db.Decimal(12, 2)
-
-  issuedAt DateTime  @default(now())
-  dueAt    DateTime?
-  notes    String?
-
-  issuedById String?
-  issuedBy   User?   @relation("InvoiceIssuedBy", fields: [issuedById], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  lines    InvoiceLine[]
-  payments Payment[]
-  refunds  Refund[]
-
-  @@index([branchId, issuedAt])
-  @@index([orderId])
-  @@index([b2bAccountId])
-  @@index([status])
-  @@index([firmId])
-  @@map("invoices")
-}
-
-model InvoiceLine {
-  id          String  @id @default(cuid())
-  invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-  orderId     String?
-  order       Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  description String
-  quantity    Decimal @default(1) @db.Decimal(12, 3)
-  unitPrice   Decimal @db.Decimal(12, 2)
-  lineTotal   Decimal @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
-
-  @@index([invoiceId])
-  @@map("invoice_lines")
-}
-
-model Payment {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id            String   @id @default(cuid())
-  paymentNumber String   @unique
-  branchId      String
-  branch        Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  orderId       String?
-  order         Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  invoiceId     String?
-  invoice       Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-
-  amount   Decimal         @db.Decimal(12, 2)
-  method   PaymentMethod   @default(CASH)
-  provider PaymentProvider @default(MANUAL)
-  state    PaymentState    @default(CAPTURED)
-
-  providerOrderId   String?
-  providerPaymentId String?
-  providerSignature String?
-  reference         String?
-  isAdvance         Boolean @default(false)
-  notes             String?
-
-  paidAt       DateTime @default(now())
-  receivedById String?
-  receivedBy   User?    @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
-
-  bankAccountId String?
-  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  refunds Refund[]
-
-  @@index([branchId, paidAt])
-  @@index([orderId])
-  @@index([invoiceId])
-  @@index([providerPaymentId])
-  @@index([firmId])
-  @@map("payments")
-}
-
-model Refund {
-  id           String   @id @default(cuid())
-  refundNumber String   @unique
-  orderId      String?
-  order        Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  invoiceId    String?
-  invoice      Invoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
-  paymentId    String?
-  payment      Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
-
-  amount        Decimal       @db.Decimal(12, 2)
-  method        PaymentMethod @default(CASH)
-  status        RefundStatus  @default(REQUESTED)
-  reason        String
-  notes         String?
-  processedById String?
-  processedBy   User?         @relation("RefundProcessedBy", fields: [processedById], references: [id], onDelete: SetNull)
-  processedAt   DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([orderId])
-  @@index([status])
-  @@map("refunds")
-}
-
-// ============================================================================
-// PICKUP & DELIVERY
-// ============================================================================
-
-model Pickup {
-  id           String       @id @default(cuid())
-  pickupNumber String       @unique
-  orderId      String
-  order        Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  branchId     String
-  branch       Branch       @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  status       PickupStatus @default(REQUESTED)
-
-  driverId String?
-  driver   Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
-
-  scheduledAt DateTime
-  assignedAt  DateTime?
-  acceptedAt  DateTime?
-  pickedUpAt  DateTime?
-  receivedAt  DateTime?
-
-  contactName   String
-  contactPhone  String
-  addressLine   String
-  landmark      String?
-  failureReason String?
-  notes         String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([branchId, status])
-  @@index([driverId, scheduledAt])
-  @@index([orderId])
-  @@map("pickups")
-}
-
-model Delivery {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id             String         @id @default(cuid())
-  deliveryNumber String         @unique
-  orderId        String
-  order          Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  branchId       String
-  branch         Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  status         DeliveryStatus @default(PENDING)
-
-  driverId String?
-  driver   Driver? @relation(fields: [driverId], references: [id], onDelete: SetNull)
-
-  scheduledAt    DateTime
-  assignedAt     DateTime?
-  dispatchedAt   DateTime?
-  deliveredAt    DateTime?
-  rescheduledFor DateTime?
-
-  contactName  String
-  contactPhone String
-  addressLine  String
-  landmark     String?
-
-  amountToCollect  Decimal        @default(0) @db.Decimal(12, 2)
-  amountCollected  Decimal        @default(0) @db.Decimal(12, 2)
-  collectionMethod PaymentMethod?
-
-  isPartial      Boolean @default(false)
-  garmentCount   Int     @default(0)
-  attemptCount   Int     @default(0)
-  failureReason  String?
-  receivedByName String?
-  proofPhotoUrl  String?
-  signatureUrl   String?
+  name           String
+  company        String?
+  phone          String
+  email          String?
+  addressLine    String?
+  city           String?
+  state          String?
+  stateCode      String?
+  pincode        String?
+  gstin          String?
+  pan            String?
+  type           CustomerType @default(RETAIL)
+  creditLimit    Decimal      @default(0) @db.Decimal(12, 2)
+  /// Balance carried forward from before this system.
+  openingBalance Decimal      @default(0) @db.Decimal(12, 2)
   notes          String?
+  isActive       Boolean      @default(true)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  // Rolled up from invoices and payments whenever either changes.
+  invoiceCount      Int       @default(0)
+  totalBilled       Decimal   @default(0) @db.Decimal(14, 2)
+  outstandingAmount Decimal   @default(0) @db.Decimal(14, 2)
+  lastInvoiceAt     DateTime?
 
-  @@index([branchId, status])
-  @@index([driverId, scheduledAt])
-  @@index([orderId])
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  quotations   Quotation[]
+  salesOrders  SalesOrder[]
+  invoices     Invoice[]
+  salesReturns SalesReturn[]
+  payments     Payment[]
+  warranties   Warranty[]
+  whatsappLogs WhatsAppLog[]
+
+  @@index([branchId, name])
+  @@index([phone])
+  @@index([gstin])
   @@index([firmId])
-  @@map("deliveries")
+  @@map("customers")
 }
-
-// ============================================================================
-// DELIVERY CHALLAN
-// ============================================================================
-
-model DeliveryChallan {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id                   String        @id @default(cuid())
-  challanNumber        String        @unique
-  orderId              String
-  order                Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  branchId             String
-  branch               Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  customerId           String?
-  customer             Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
-
-  customerName         String
-  customerPhone        String
-  customerAddress      String?
-
-  challanDate          DateTime      @default(now())
-  deliveryDate         DateTime?
-  expectedDeliveryDate DateTime?
-
-  status               ChallanStatus @default(DRAFT)
-  paymentStatus        PaymentStatus @default(UNPAID)
-
-  subtotal             Decimal       @default(0) @db.Decimal(12, 2)
-  discountAmount       Decimal       @default(0) @db.Decimal(12, 2)
-  taxableAmount        Decimal       @default(0) @db.Decimal(12, 2)
-  gstRate              Decimal       @default(18) @db.Decimal(5, 2)
-  gstAmount            Decimal       @default(0) @db.Decimal(12, 2)
-  grandTotal           Decimal       @default(0) @db.Decimal(12, 2)
-  paidAmount           Decimal       @default(0) @db.Decimal(12, 2)
-  balanceAmount        Decimal       @default(0) @db.Decimal(12, 2)
-
-  notes                String?
-  terms                String?
-  deliveredByName      String?
-  receivedByName       String?
-
-  createdById          String?
-  createdBy            User?         @relation("ChallanCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt            DateTime      @default(now())
-  updatedAt            DateTime      @updatedAt
-
-  items                DeliveryChallanItem[]
-  statusHistory        DeliveryChallanHistory[]
-
-  @@index([branchId, status])
-  @@index([orderId])
-  @@index([customerId])
-  @@index([challanNumber])
-  @@index([challanDate])
-  @@index([firmId])
-  @@map("delivery_challans")
-}
-
-model DeliveryChallanItem {
-  id             String          @id @default(cuid())
-  challanId      String
-  challan        DeliveryChallan @relation(fields: [challanId], references: [id], onDelete: Cascade)
-  garmentId      String?
-  garment        Garment?        @relation(fields: [garmentId], references: [id], onDelete: SetNull)
-  garmentCode    String
-  category       String
-  description    String
-  service        String
-  quantity       Int             @default(1)
-  unitPrice      Decimal         @db.Decimal(12, 2)
-  amount         Decimal         @db.Decimal(12, 2)
-  status         GarmentStatus   @default(READY)
-
-  createdAt      DateTime        @default(now())
-
-  @@index([challanId])
-  @@index([garmentId])
-  @@map("delivery_challan_items")
-}
-
-model DeliveryChallanHistory {
-  id         String          @id @default(cuid())
-  challanId  String
-  challan    DeliveryChallan @relation(fields: [challanId], references: [id], onDelete: Cascade)
-  fromStatus ChallanStatus?
-  toStatus   ChallanStatus
-  userId     String?
-  userName   String?
-  note       String?
-  createdAt  DateTime        @default(now())
-
-  @@index([challanId, createdAt])
-  @@map("delivery_challan_history")
-}
-
-
-// ============================================================================
-// INVENTORY
-// ============================================================================
-
-model InventoryItem {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id            String            @id @default(cuid())
-  sku           String
-  name          String
-  category      InventoryCategory @default(OTHER)
-  unit          String            @default("pcs")
-  description   String?
-  minStockLevel Decimal           @default(0) @db.Decimal(12, 3)
-  costPrice     Decimal           @default(0) @db.Decimal(12, 2)
-  isActive      Boolean           @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  stocks       InventoryStock[]
-  transactions InventoryTransaction[]
-  poItems      PurchaseOrderItem[]
-  grnItems     GoodsReceiptItem[]
-  returnItems  PurchaseReturnItem[]
-
-  @@index([category])
-  @@index([isActive])
-  @@unique([firmId, sku])
-  @@index([firmId])
-  @@map("inventory_items")
-}
-
-model InventoryStock {
-  id       String        @id @default(cuid())
-  itemId   String
-  item     InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  branchId String
-  branch   Branch        @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  quantity Decimal       @default(0) @db.Decimal(12, 3)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([itemId, branchId])
-  @@index([branchId])
-  @@map("inventory_stocks")
-}
-
-model InventoryTransaction {
-  id           String           @id @default(cuid())
-  itemId       String
-  item         InventoryItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  branchId     String
-  branch       Branch           @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  type         InventoryTxnType
-  quantity     Decimal          @db.Decimal(12, 3)
-  balanceAfter Decimal          @default(0) @db.Decimal(12, 3)
-  unitCost     Decimal?         @db.Decimal(12, 2)
-
-  counterpartBranchId String?
-  reference           String?
-  notes               String?
-
-  userId String?
-  user   User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-
-  @@index([itemId, createdAt])
-  @@index([branchId, createdAt])
-  @@index([type])
-  @@map("inventory_transactions")
-}
-
-// ============================================================================
-// PURCHASES & SUPPLIERS
-// ============================================================================
 
 model Supplier {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id            String  @id @default(cuid())
-  code          String
-  name          String
-  contactPerson String?
-  phone         String?
-  email         String?
-  addressLine   String?
-  gstNumber     String?
-  paymentTerms  String?
-  creditDays    Int     @default(0)
-  isActive      Boolean @default(true)
+  firmId         String
+  firm           Firm    @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id             String  @id @default(cuid())
+  code           String  @unique
+  name           String
+  company        String?
+  gstin          String?
+  pan            String?
+  phone          String?
+  email          String?
+  addressLine    String?
+  city           String?
+  state          String?
+  stateCode      String?
+  pincode        String?
+  paymentTerms   String?
+  creditDays     Int     @default(0)
+  openingBalance Decimal @default(0) @db.Decimal(12, 2)
+  isActive       Boolean @default(true)
+
+  // Rolled up from purchase invoices and supplier payments.
+  purchaseCount     Int     @default(0)
+  totalPurchased    Decimal @default(0) @db.Decimal(14, 2)
+  outstandingAmount Decimal @default(0) @db.Decimal(14, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   purchaseOrders   PurchaseOrder[]
   purchaseInvoices PurchaseInvoice[]
-  payments         SupplierPayment[]
-  returns          PurchaseReturn[]
+  supplierPayments SupplierPayment[]
+  purchaseReturns  PurchaseReturn[]
+  payments         Payment[]
 
-  @@index([isActive])
-  @@unique([firmId, code])
-  @@index([firmId])
+  @@index([firmId, name])
+  @@index([gstin])
   @@map("suppliers")
 }
 
+// ============================================================================
+// SALES — QUOTATION → SALES ORDER → INVOICE → PAYMENT
+// ============================================================================
+
+model Quotation {
+  firmId          String
+  firm            Firm            @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id              String          @id @default(cuid())
+  quotationNumber String          @unique
+  branchId        String
+  branch          Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId      String
+  customer        Customer        @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status          QuotationStatus @default(DRAFT)
+  taxMode         TaxMode         @default(NON_GST)
+
+  quotationDate DateTime
+  validUntil    DateTime?
+
+  subtotal       Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
+  cgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(12, 2)
+
+  notes String?
+  terms String?
+
+  createdById          String?
+  createdBy            User?        @relation("QuotationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  convertedInvoices    Invoice[]    @relation("QuotationConverted")
+  convertedSalesOrders SalesOrder[]
+  convertedAt          DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines QuotationLine[]
+
+  @@index([branchId, status])
+  @@index([customerId])
+  @@index([firmId, status])
+  @@index([quotationDate])
+  @@map("quotations")
+}
+
+model QuotationLine {
+  id              String          @id @default(cuid())
+  quotationId     String
+  quotation       Quotation       @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId       String?
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description     String
+  hsnCode         String?
+  quantity        Int
+  unitPrice       Decimal         @db.Decimal(12, 2)
+  discountPercent Decimal         @default(0) @db.Decimal(5, 2)
+  gstRate         Decimal         @default(0) @db.Decimal(5, 2)
+  lineTotal       Decimal         @db.Decimal(12, 2)
+
+  @@index([quotationId])
+  @@map("quotation_lines")
+}
+
+model SalesOrder {
+  firmId      String
+  firm        Firm             @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id          String           @id @default(cuid())
+  orderNumber String           @unique
+  branchId    String
+  branch      Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId  String
+  customer    Customer         @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  quotationId String?
+  quotation   Quotation?       @relation(fields: [quotationId], references: [id], onDelete: SetNull)
+  status      SalesOrderStatus @default(DRAFT)
+  taxMode     TaxMode          @default(NON_GST)
+
+  orderDate    DateTime
+  expectedDate DateTime?
+  notes        String?
+
+  subtotal       Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
+  cgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(12, 2)
+
+  createdById String?
+  createdBy   User?     @relation("SalesOrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  invoices    Invoice[] @relation("SalesOrderInvoice")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines SalesOrderLine[]
+
+  @@index([branchId, status])
+  @@index([customerId])
+  @@index([quotationId])
+  @@index([firmId, status])
+  @@map("sales_orders")
+}
+
+model SalesOrderLine {
+  id              String          @id @default(cuid())
+  orderId         String
+  order           SalesOrder      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId       String?
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description     String
+  hsnCode         String?
+  quantity        Int
+  unitPrice       Decimal         @db.Decimal(12, 2)
+  discountPercent Decimal         @default(0) @db.Decimal(5, 2)
+  gstRate         Decimal         @default(0) @db.Decimal(5, 2)
+  lineTotal       Decimal         @db.Decimal(12, 2)
+  invoicedQty     Int             @default(0)
+
+  @@index([orderId])
+  @@map("sales_order_lines")
+}
+
+/// The sales document. A TAX_INVOICE is only ever created in GST access mode;
+/// a NON_GST_BILL only in NON_GST mode. `firmId + accessMode + financialYear`
+/// sequences are allocated separately so the two never collide.
+model Invoice {
+  firmId        String
+  firm          Firm          @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id            String        @id @default(cuid())
+  invoiceNumber String        @unique
+  kind          InvoiceKind   @default(NON_GST_BILL)
+  status        InvoiceStatus @default(ISSUED)
+  branchId      String
+  branch        Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  customerId    String
+  customer      Customer      @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  taxMode       TaxMode       @default(NON_GST)
+  financialYear String        @default("26-27")
+
+  // Snapshot of customer billing details at issue time.
+  billToName    String
+  billToPhone   String?
+  billToEmail   String?
+  billToAddress String?
+  billToGstin   String?
+  /// Place of supply state name — decides CGST+SGST vs IGST together with
+  /// the seller's own state.
+  placeOfSupply String?
+
+  // Source documents.
+  quotationId  String?
+  quotation    Quotation?  @relation("QuotationConverted", fields: [quotationId], references: [id], onDelete: SetNull)
+  salesOrderId String?
+  salesOrder   SalesOrder? @relation("SalesOrderInvoice", fields: [salesOrderId], references: [id], onDelete: SetNull)
+
+  invoiceDate DateTime  @default(now())
+  dueDate     DateTime?
+
+  subtotal       Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
+  cgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  roundOff       Decimal @default(0) @db.Decimal(12, 2)
+  totalAmount    Decimal @default(0) @db.Decimal(12, 2)
+  amountPaid     Decimal @default(0) @db.Decimal(12, 2)
+  amountDue      Decimal @default(0) @db.Decimal(12, 2)
+
+  notes String?
+  terms String?
+
+  cancelledAt        DateTime?
+  cancellationReason String?
+
+  createdById String?
+  createdBy   User?   @relation("InvoiceIssuedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines           InvoiceLine[]
+  payments        Payment[]
+  salesReturns    SalesReturn[]
+  serialUnitsSold SerialUnit[]  @relation("SerialSoldInvoice")
+  warranties      Warranty[]
+
+  @@index([branchId, invoiceDate])
+  @@index([customerId])
+  @@index([status])
+  @@index([kind])
+  @@index([firmId, taxMode, financialYear])
+  @@index([invoiceDate])
+  @@map("invoices")
+}
+
+model InvoiceLine {
+  id              String          @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice         @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId       String?
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description     String
+  hsnCode         String?
+  serialNumbers   String? // newline-separated serials sold on this line
+  quantity        Int
+  unitPrice       Decimal         @db.Decimal(12, 2)
+  discountPercent Decimal         @default(0) @db.Decimal(5, 2)
+  gstRate         Decimal         @default(0) @db.Decimal(5, 2)
+  taxableValue    Decimal         @default(0) @db.Decimal(12, 2)
+  cgstAmount      Decimal         @default(0) @db.Decimal(12, 2)
+  sgstAmount      Decimal         @default(0) @db.Decimal(12, 2)
+  igstAmount      Decimal         @default(0) @db.Decimal(12, 2)
+  lineTotal       Decimal         @db.Decimal(12, 2)
+  returnedQty     Int             @default(0)
+
+  serialUnits SerialUnit[] @relation("SerialSoldLine")
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("invoice_lines")
+}
+
+model SalesReturn {
+  firmId       String
+  firm         Firm              @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id           String            @id @default(cuid())
+  returnNumber String            @unique
+  branchId     String
+  branch       Branch            @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  invoiceId    String
+  invoice      Invoice           @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  customerId   String
+  customer     Customer          @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  status       SalesReturnStatus @default(PENDING)
+  taxMode      TaxMode           @default(NON_GST)
+
+  reason       String
+  refundMethod PaymentMethod @default(CASH)
+  totalAmount  Decimal       @default(0) @db.Decimal(12, 2)
+
+  createdById  String?
+  createdBy    User?     @relation("ReturnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedById String?
+  approvedBy   User?     @relation("ReturnApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedAt   DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  lines   SalesReturnLine[]
+  refunds Payment[]
+
+  @@index([branchId, status])
+  @@index([invoiceId])
+  @@index([customerId])
+  @@index([firmId, status])
+  @@map("sales_returns")
+}
+
+model SalesReturnLine {
+  id            String          @id @default(cuid())
+  returnId      String
+  salesReturn   SalesReturn     @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  invoiceLineId String?
+  description   String
+  serialNumbers String? // newline-separated serials being returned
+  quantity      Int
+  unitPrice     Decimal         @db.Decimal(12, 2)
+  gstRate       Decimal         @default(0) @db.Decimal(5, 2)
+  lineTotal     Decimal         @db.Decimal(12, 2)
+
+  @@index([returnId])
+  @@index([productId])
+  @@map("sales_return_lines")
+}
+
+// ============================================================================
+// PAYMENTS
+// ============================================================================
+
+/// Customer receipts, supplier payments, refunds and advances — one ledger.
+model Payment {
+  firmId        String
+  firm          Firm             @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id            String           @id @default(cuid())
+  paymentNumber String           @unique
+  branchId      String
+  branch        Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  direction     PaymentDirection
+  status        PaymentStatus    @default(PAID)
+
+  customerId        String?
+  customer          Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  supplierId        String?
+  supplier          Supplier?        @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  invoiceId         String?
+  invoice           Invoice?         @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  purchaseInvoiceId String?
+  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  salesReturnId     String?
+  salesReturn       SalesReturn?     @relation(fields: [salesReturnId], references: [id], onDelete: SetNull)
+
+  amount    Decimal       @db.Decimal(12, 2)
+  method    PaymentMethod @default(CASH)
+  /// True for payments recorded before any invoice (advances / on-account).
+  isAdvance Boolean       @default(false)
+  reference String?
+  notes     String?
+
+  paidAt       DateTime @default(now())
+  receivedById String?
+  receivedBy   User?    @relation("PaymentReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId, paidAt])
+  @@index([customerId])
+  @@index([supplierId])
+  @@index([invoiceId])
+  @@index([firmId, paidAt])
+  @@map("payments")
+}
+
+// ============================================================================
+// PURCHASES — PO → GRN → PURCHASE INVOICE → PAYMENT → RETURN
+// ============================================================================
+
 model PurchaseOrder {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  firmId     String
+  firm       Firm                @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id         String              @id @default(cuid())
   poNumber   String              @unique
   supplierId String
@@ -1671,14 +1382,19 @@ model PurchaseOrder {
   branchId   String
   branch     Branch              @relation(fields: [branchId], references: [id], onDelete: Restrict)
   status     PurchaseOrderStatus @default(DRAFT)
+  taxMode    TaxMode             @default(NON_GST)
 
   orderDate    DateTime  @default(now())
   expectedDate DateTime?
 
-  subtotal  Decimal @default(0) @db.Decimal(12, 2)
-  taxAmount Decimal @default(0) @db.Decimal(12, 2)
-  total     Decimal @default(0) @db.Decimal(12, 2)
-  notes     String?
+  subtotal       Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
+  cgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  total          Decimal @default(0) @db.Decimal(12, 2)
+  notes          String?
 
   createdById String?
   createdBy   User?   @relation("PurchaseOrderCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
@@ -1686,422 +1402,227 @@ model PurchaseOrder {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items    PurchaseOrderItem[]
+  items    PurchaseOrderLine[]
   receipts GoodsReceipt[]
   invoices PurchaseInvoice[]
   returns  PurchaseReturn[]
 
   @@index([supplierId])
   @@index([branchId, status])
-  @@index([firmId])
+  @@index([firmId, status])
   @@map("purchase_orders")
 }
 
-model PurchaseOrderItem {
-  id               String        @id @default(cuid())
+model PurchaseOrderLine {
+  id               String          @id @default(cuid())
   poId             String
-  po               PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
-  itemId           String
-  item             InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  quantity         Decimal       @db.Decimal(12, 3)
-  receivedQuantity Decimal       @default(0) @db.Decimal(12, 3)
-  unitPrice        Decimal       @db.Decimal(12, 2)
-  taxRate          Decimal       @default(0) @db.Decimal(5, 2)
-  lineTotal        Decimal       @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  po               PurchaseOrder   @relation(fields: [poId], references: [id], onDelete: Cascade)
+  productId        String
+  product          Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId        String?
+  variant          ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description      String
+  hsnCode          String?
+  quantity         Int
+  receivedQuantity Int             @default(0)
+  unitPrice        Decimal         @db.Decimal(12, 2)
+  discountPercent  Decimal         @default(0) @db.Decimal(5, 2)
+  gstRate          Decimal         @default(0) @db.Decimal(5, 2)
+  lineTotal        Decimal         @db.Decimal(12, 2)
 
   @@index([poId])
-  @@map("purchase_order_items")
+  @@index([productId])
+  @@map("purchase_order_lines")
 }
 
 model GoodsReceipt {
+  firmId       String
+  firm         Firm          @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id           String        @id @default(cuid())
   grnNumber    String        @unique
-  poId         String
-  po           PurchaseOrder @relation(fields: [poId], references: [id], onDelete: Cascade)
+  /// Null when goods arrive without a purchase order (over-the-counter buys).
+  poId         String?
+  po           PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
   branchId     String
   branch       Branch        @relation(fields: [branchId], references: [id], onDelete: Restrict)
   receivedAt   DateTime      @default(now())
+  notes        String?
   receivedById String?
   receivedBy   User?         @relation("GoodsReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
-  notes        String?
 
   createdAt DateTime @default(now())
 
-  items GoodsReceiptItem[]
+  items GoodsReceiptLine[]
 
   @@index([poId])
+  @@index([branchId, receivedAt])
   @@map("goods_receipts")
 }
 
-model GoodsReceiptItem {
-  id        String        @id @default(cuid())
-  grnId     String
-  grn       GoodsReceipt  @relation(fields: [grnId], references: [id], onDelete: Cascade)
-  itemId    String
-  item      InventoryItem @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  quantity  Decimal       @db.Decimal(12, 3)
-  unitPrice Decimal       @default(0) @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
+model GoodsReceiptLine {
+  id            String          @id @default(cuid())
+  grnId         String
+  grn           GoodsReceipt    @relation(fields: [grnId], references: [id], onDelete: Cascade)
+  productId     String
+  product       Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId     String?
+  variant       ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  quantity      Int
+  unitPrice     Decimal         @default(0) @db.Decimal(12, 2)
+  serialNumbers String? // newline-separated serials received
 
   @@index([grnId])
-  @@map("goods_receipt_items")
+  @@index([productId])
+  @@map("goods_receipt_lines")
 }
 
 model PurchaseInvoice {
+  firmId        String
+  firm          Firm                  @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String                @id @default(cuid())
   invoiceNumber String
+  supplierRef   String? // supplier's own bill number
   supplierId    String
   supplier      Supplier              @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   poId          String?
   po            PurchaseOrder?        @relation(fields: [poId], references: [id], onDelete: SetNull)
+  branchId      String
+  branch        Branch                @relation(fields: [branchId], references: [id], onDelete: Restrict)
   status        PurchaseInvoiceStatus @default(UNPAID)
+  taxMode       TaxMode               @default(NON_GST)
 
   invoiceDate DateTime  @default(now())
   dueDate     DateTime?
-  subtotal    Decimal   @default(0) @db.Decimal(12, 2)
-  taxAmount   Decimal   @default(0) @db.Decimal(12, 2)
-  total       Decimal   @default(0) @db.Decimal(12, 2)
-  amountPaid  Decimal   @default(0) @db.Decimal(12, 2)
-  notes       String?
+
+  subtotal       Decimal @default(0) @db.Decimal(12, 2)
+  discountAmount Decimal @default(0) @db.Decimal(12, 2)
+  taxableAmount  Decimal @default(0) @db.Decimal(12, 2)
+  cgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  sgstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  igstAmount     Decimal @default(0) @db.Decimal(12, 2)
+  total          Decimal @default(0) @db.Decimal(12, 2)
+  amountPaid     Decimal @default(0) @db.Decimal(12, 2)
+  notes          String?
+
+  createdById String?
+  createdBy   User?   @relation("PurchaseInvoiceCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  payments SupplierPayment[]
+  lines           PurchaseInvoiceLine[]
+  payments        SupplierPayment[]
+  serialUnits     SerialUnit[]
+  purchaseReturns PurchaseReturn[]
+  paymentRecords  Payment[]
 
-  @@unique([supplierId, invoiceNumber])
+  @@unique([firmId, supplierId, invoiceNumber])
+  @@index([supplierId])
+  @@index([branchId, invoiceDate])
   @@index([status])
+  @@index([firmId, status])
   @@map("purchase_invoices")
+}
+
+model PurchaseInvoiceLine {
+  id              String          @id @default(cuid())
+  invoiceId       String
+  invoice         PurchaseInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  productId       String
+  product         Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId       String?
+  variant         ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description     String
+  hsnCode         String?
+  serialNumbers   String? // newline-separated serials received on this line
+  quantity        Int
+  unitPrice       Decimal         @db.Decimal(12, 2)
+  discountPercent Decimal         @default(0) @db.Decimal(5, 2)
+  gstRate         Decimal         @default(0) @db.Decimal(5, 2)
+  lineTotal       Decimal         @db.Decimal(12, 2)
+  returnedQty     Int             @default(0)
+
+  @@index([invoiceId])
+  @@index([productId])
+  @@map("purchase_invoice_lines")
 }
 
 model SupplierPayment {
   id            String           @id @default(cuid())
   paymentNumber String           @unique
+  firmId        String
+  firm          Firm             @relation(fields: [firmId], references: [id], onDelete: Restrict)
   supplierId    String
   supplier      Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
   invoiceId     String?
   invoice       PurchaseInvoice? @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  branchId      String
+  branch        Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
   amount        Decimal          @db.Decimal(12, 2)
   method        PaymentMethod    @default(BANK_TRANSFER)
   reference     String?
   notes         String?
   paidAt        DateTime         @default(now())
   paidById      String?
-  paidBy        User?            @relation("SupplierPaymentBy", fields: [paidById], references: [id], onDelete: SetNull)
-
-  bankAccountId String?
-  bankAccount   BankAccount?     @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
+  paidBy        User?            @relation("SupplierPaymentPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
 
   @@index([supplierId])
+  @@index([branchId, paidAt])
+  @@index([firmId, paidAt])
   @@map("supplier_payments")
 }
 
 model PurchaseReturn {
-  id           String         @id @default(cuid())
-  returnNumber String         @unique
-  supplierId   String
-  supplier     Supplier       @relation(fields: [supplierId], references: [id], onDelete: Restrict)
-  poId         String?
-  po           PurchaseOrder? @relation(fields: [poId], references: [id], onDelete: SetNull)
-  branchId     String
-  branch       Branch         @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  reason       String
-  total        Decimal        @default(0) @db.Decimal(12, 2)
-  returnedAt   DateTime       @default(now())
+  firmId            String
+  firm              Firm             @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id                String           @id @default(cuid())
+  returnNumber      String           @unique
+  supplierId        String
+  supplier          Supplier         @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+  poId              String?
+  po                PurchaseOrder?   @relation(fields: [poId], references: [id], onDelete: SetNull)
+  purchaseInvoiceId String?
+  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  branchId          String
+  branch            Branch           @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  reason            String
+  taxMode           TaxMode          @default(NON_GST)
+  total             Decimal          @default(0) @db.Decimal(12, 2)
+  returnedAt        DateTime         @default(now())
+  createdById       String?
+  createdBy         User?            @relation("PurchaseReturnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  items PurchaseReturnItem[]
+  items PurchaseReturnLine[]
 
   @@index([supplierId])
+  @@index([branchId, returnedAt])
+  @@index([firmId, returnedAt])
   @@map("purchase_returns")
 }
 
-model PurchaseReturnItem {
-  id        String         @id @default(cuid())
-  returnId  String
-  return    PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
-  itemId    String
-  item      InventoryItem  @relation(fields: [itemId], references: [id], onDelete: Restrict)
-  quantity  Decimal        @db.Decimal(12, 3)
-  unitPrice Decimal        @default(0) @db.Decimal(12, 2)
-
-  createdAt DateTime @default(now())
+model PurchaseReturnLine {
+  id             String          @id @default(cuid())
+  returnId       String
+  purchaseReturn PurchaseReturn  @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  productId      String
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId      String?
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  description    String
+  serialNumbers  String? // exact serials being returned for tracked products
+  quantity       Int
+  unitPrice      Decimal         @default(0) @db.Decimal(12, 2)
+  gstRate        Decimal         @default(0) @db.Decimal(5, 2)
+  lineTotal      Decimal         @default(0) @db.Decimal(12, 2)
 
   @@index([returnId])
-  @@map("purchase_return_items")
-}
-
-// ============================================================================
-// B2B / CORPORATE
-// ============================================================================
-
-model B2BAccount {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id                 String         @id @default(cuid())
-  code               String         @unique
-  businessName       String
-  type               B2BAccountType @default(CORPORATE)
-  contactPerson      String?
-  phone              String
-  email              String?
-  billingAddress     String?
-  gstNumber          String?
-  creditLimit        Decimal        @default(0) @db.Decimal(12, 2)
-  creditDays         Int            @default(30)
-  paymentTerms       String?
-  outstandingBalance Decimal        @default(0) @db.Decimal(12, 2)
-  isActive           Boolean        @default(true)
-
-  branchId String?
-  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  contracts  B2BContract[]
-  schedules  B2BSchedule[]
-  statements B2BStatement[]
-  orders     Order[]
-  invoices   Invoice[]
-
-  @@index([type])
-  @@index([isActive])
-  @@index([firmId])
-  @@map("b2b_accounts")
-}
-
-model B2BContract {
-  id                  String         @id @default(cuid())
-  contractNumber      String         @unique
-  accountId           String
-  account             B2BAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  status              ContractStatus @default(ACTIVE)
-  billingCycle        BillingCycle   @default(MONTHLY)
-  startDate           DateTime
-  endDate             DateTime?
-  minimumMonthlyValue Decimal        @default(0) @db.Decimal(12, 2)
-  terms               String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  rateCards B2BRateCard[]
-
-  @@index([accountId, status])
-  @@map("b2b_contracts")
-}
-
-model B2BRateCard {
-  id            String       @id @default(cuid())
-  contractId    String
-  contract      B2BContract  @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  serviceId     String
-  service       Service      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  garmentTypeId String?
-  garmentType   GarmentType? @relation(fields: [garmentTypeId], references: [id], onDelete: SetNull)
-  pricingMode   PricingMode  @default(PER_PIECE)
-  rate          Decimal      @db.Decimal(12, 2)
-  effectiveFrom DateTime     @default(now())
-  effectiveTo   DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([contractId, serviceId, garmentTypeId])
-  @@index([contractId])
-  @@map("b2b_rate_cards")
-}
-
-model B2BSchedule {
-  id        String       @id @default(cuid())
-  accountId String
-  account   B2BAccount   @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  type      ScheduleType
-  dayOfWeek Int
-  timeSlot  String
-  isActive  Boolean      @default(true)
-  notes     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@index([accountId])
-  @@map("b2b_schedules")
-}
-
-model B2BStatement {
-  id              String        @id @default(cuid())
-  statementNumber String        @unique
-  accountId       String
-  account         B2BAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
-  periodStart     DateTime
-  periodEnd       DateTime
-  orderCount      Int           @default(0)
-  totalAmount     Decimal       @default(0) @db.Decimal(12, 2)
-  paidAmount      Decimal       @default(0) @db.Decimal(12, 2)
-  dueAmount       Decimal       @default(0) @db.Decimal(12, 2)
-  status          InvoiceStatus @default(ISSUED)
-  generatedAt     DateTime      @default(now())
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([accountId, periodStart, periodEnd])
-  @@index([accountId])
-  @@map("b2b_statements")
-}
-
-// ============================================================================
-// COMPLAINTS & DAMAGE
-// ============================================================================
-
-model Complaint {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id              String            @id @default(cuid())
-  complaintNumber String            @unique
-  type            ComplaintType
-  status          ComplaintStatus   @default(OPEN)
-  priority        ComplaintPriority @default(MEDIUM)
-
-  branchId String
-  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
-
-  orderId   String?
-  order     Order?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  garmentId String?
-  garment   Garment? @relation(fields: [garmentId], references: [id], onDelete: SetNull)
-
-  raisedByName  String
-  raisedByPhone String?
-  description   String
-
-  assignedToId String?
-  assignedTo   User?   @relation("ComplaintAssignee", fields: [assignedToId], references: [id], onDelete: SetNull)
-
-  investigationNotes String?
-  resolution         ComplaintResolution?
-  resolutionNotes    String?
-  compensationAmount Decimal?             @db.Decimal(12, 2)
-  resolvedAt         DateTime?
-  resolvedById       String?
-  resolvedBy         User?                @relation("ComplaintResolvedBy", fields: [resolvedById], references: [id], onDelete: SetNull)
-
-  createdById String?
-  createdBy   User?   @relation("ComplaintCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  attachments ComplaintAttachment[]
-
-  @@index([branchId, status])
-  @@index([orderId])
-  @@index([garmentId])
-  @@index([createdAt])
-  @@index([firmId])
-  @@map("complaints")
-}
-
-model ComplaintAttachment {
-  id           String    @id @default(cuid())
-  complaintId  String
-  complaint    Complaint @relation(fields: [complaintId], references: [id], onDelete: Cascade)
-  url          String
-  storageKey   String
-  mimeType     String?
-  sizeBytes    Int?
-  caption      String?
-  uploadedById String?
-  uploadedBy   User?     @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
-  createdAt    DateTime  @default(now())
-
-  @@index([complaintId])
-  @@map("complaint_attachments")
-}
-
-// ============================================================================
-// NOTIFICATIONS
-// ============================================================================
-
-model NotificationTemplate {
-  id       String              @id @default(cuid())
-  code     String              @unique
-  name     String
-  channel  NotificationChannel
-  event    NotificationEvent
-  subject  String?
-  body     String
-  language String              @default("en")
-  isActive Boolean             @default(true)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  notifications Notification[]
-
-  @@index([event, channel])
-  @@map("notification_templates")
-}
-
-model Notification {
-  id      String              @id @default(cuid())
-  event   NotificationEvent
-  channel NotificationChannel
-  status  NotificationStatus  @default(PENDING)
-
-  templateId String?
-  template   NotificationTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-
-  orderId String?
-  order   Order?  @relation(fields: [orderId], references: [id], onDelete: SetNull)
-
-  branchId String?
-  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: SetNull)
-
-  recipientName  String?
-  recipientPhone String?
-  recipientEmail String?
-  subject        String?
-  body           String
-  payload        Json?
-
-  providerMessageId String?
-  errorMessage      String?
-  retryCount        Int       @default(0)
-  sentAt            DateTime?
-  deliveredAt       DateTime?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  logs NotificationLog[]
-
-  @@index([status])
-  @@index([orderId])
-  @@index([createdAt])
-  @@map("notifications")
-}
-
-model NotificationLog {
-  id             String             @id @default(cuid())
-  notificationId String
-  notification   Notification       @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  status         NotificationStatus
-  detail         String?
-  createdAt      DateTime           @default(now())
-
-  @@index([notificationId, createdAt])
-  @@map("notification_logs")
+  @@index([productId])
+  @@map("purchase_return_lines")
 }
 
 // ============================================================================
@@ -2109,21 +1630,19 @@ model NotificationLog {
 // ============================================================================
 
 model Expense {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  firmId        String
+  firm          Firm            @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id            String          @id @default(cuid())
   expenseNumber String          @unique
   branchId      String
   branch        Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  category      ExpenseCategory @default(MISCELLANEOUS)
+  category      ExpenseCategory @default(OTHER)
   status        ExpenseStatus   @default(PENDING)
   amount        Decimal         @db.Decimal(12, 2)
   description   String
   paidTo        String?
   paymentMethod PaymentMethod   @default(CASH)
   reference     String?
-  bankAccountId String?
-  bankAccount   BankAccount?    @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
   attachmentUrl String?
   expenseDate   DateTime        @default(now())
 
@@ -2138,479 +1657,91 @@ model Expense {
 
   @@index([branchId, expenseDate])
   @@index([category])
-  @@index([firmId])
+  @@index([firmId, expenseDate])
   @@map("expenses")
 }
 
-/// Counter-facing customer record. Orders keep their own copy of the contact
-/// details so historical invoices never change; this row is the searchable
-/// directory and the place lifetime figures are rolled up.
-model Customer {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id       String @id @default(cuid())
-  code     String @unique
-  branchId String
-  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+// ============================================================================
+// WARRANTY
+// ============================================================================
 
-  name  String
-  phone String
-  email String?
+/// Created automatically when a serialized product is sold; one record per
+/// serial per invoice line.
+model Warranty {
+  firmId       String
+  firm         Firm        @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  id           String      @id @default(cuid())
+  productId    String
+  product      Product     @relation(fields: [productId], references: [id], onDelete: Restrict)
+  serialUnitId String?
+  serialUnit   SerialUnit? @relation(fields: [serialUnitId], references: [id], onDelete: SetNull)
+  customerId   String?
+  customer     Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  invoiceId    String?
+  invoice      Invoice?    @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  branchId     String?
+  branch       Branch?     @relation(fields: [branchId], references: [id], onDelete: SetNull)
 
-  addressLine String?
-  city        String?
-  pincode     String?
-  landmark    String?
-
-  notes    String?
-  isActive Boolean @default(true)
-
-  // Rolled up from orders and payments whenever either changes.
-  orderCount        Int       @default(0)
-  totalSpent        Decimal   @default(0) @db.Decimal(14, 2)
-  outstandingAmount Decimal   @default(0) @db.Decimal(14, 2)
-  lastOrderAt       DateTime?
-
-  createdById String?
-  createdBy   User?   @relation("CustomerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  serialNumber   String?
+  imei           String?
+  warrantyStart  DateTime
+  warrantyEnd    DateTime
+  warrantyMonths Int            @default(0)
+  warrantyType   WarrantyType   @default(STANDARD)
+  status         WarrantyStatus @default(ACTIVE)
+  notes          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  orders       Order[]
-  invoices     Invoice[]
-  deliveryChallans DeliveryChallan[]
-  whatsAppLogs WhatsAppLog[]
-
-  @@unique([branchId, phone])
-  @@index([branchId, name])
-  @@index([phone])
-  @@index([firmId])
-  @@map("customers")
-}
-
-/// Append-only log of every tag scan, so the counter can see what was scanned,
-/// by whom, and what happened next.
-model ScanEvent {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id       String @id @default(cuid())
-  branchId String
-  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
-
-  rawCode     String
-  resolvedAs  ScanTargetKind @default(UNKNOWN)
-  orderId     String?
-  order       Order?         @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  garmentCode String?
-
-  succeeded Boolean    @default(true)
-  message   String?
-  action    String?
-  source    ScanSource @default(KEYBOARD)
-
-  scannedById String?
-  scannedBy   User?   @relation("ScanEventScannedBy", fields: [scannedById], references: [id], onDelete: SetNull)
-
-  scannedAt DateTime @default(now())
-
-  @@index([branchId, scannedAt])
-  @@index([orderId])
-  @@index([firmId])
-  @@map("scan_events")
-}
-
-enum ScanTargetKind {
-  ORDER
-  GARMENT
-  SLOT
-  UNKNOWN
-}
-
-enum ScanSource {
-  KEYBOARD
-  CAMERA
-  HARDWARE
-}
-
-/// The buckets the shop floor actually counts in. One garment belongs to
-/// exactly one, and it decides the prefix on the garment's own id.
-enum TrackingCategory {
-  TROUSERS
-  SHIRTS
-  TSHIRTS
-  JACKETS
-  DRESSES
-  SAREES
-  BEDSHEETS
-  OTHER
-}
-
-/// One row per physical scan of one garment at one station. This is the
-/// evidence the mismatch centre works from: what was scanned, against which
-/// order the operator thought they were working, and what the system made of
-/// it. Append-only.
-model GarmentScan {
-  id        String  @id @default(cuid())
-  garmentId String
-  garment   Garment @relation(fields: [garmentId], references: [id], onDelete: Cascade)
-
-  /// The order the garment actually belongs to.
-  orderId String
-  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  /// The order the operator had open when they scanned, when there was one.
-  /// A difference between this and orderId is a wrong-order scan.
-  contextOrderId String?
-  contextOrder   Order?  @relation("GarmentScanContext", fields: [contextOrderId], references: [id], onDelete: SetNull)
-
-  branchId String
-  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
-
-  trackingCategory TrackingCategory
-  stage            ProcessingStage
-  outcome          GarmentScanOutcome @default(MATCH)
-
-  /// Where the garment was physically read, when the station recorded it.
-  location String?
-  note     String?
-
-  scannedById String?
-  scannedBy   User?   @relation("GarmentScanBy", fields: [scannedById], references: [id], onDelete: SetNull)
-
-  scannedAt DateTime @default(now())
-
-  @@index([garmentId, scannedAt])
-  @@index([orderId])
-  @@index([branchId, scannedAt])
-  @@index([branchId, trackingCategory, stage])
-  @@index([outcome])
-  @@map("garment_scans")
-}
-
-enum GarmentScanOutcome {
-  MATCH
-  WRONG_ORDER
-  WRONG_CATEGORY
-  DUPLICATE
-}
-
-/// A problem a person raised or the system escalated, and whether it is still
-/// open. Most mismatches are derived live from scans; this table is for the
-/// ones that need to survive a refresh — a garment reported missing, a
-/// wrong-order scan someone has acknowledged.
-model GarmentException {
-  id        String  @id @default(cuid())
-  garmentId String
-  garment   Garment @relation(fields: [garmentId], references: [id], onDelete: Cascade)
-
-  branchId String
-  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
-
-  type   GarmentExceptionType
-  status GarmentExceptionStatus @default(OPEN)
-
-  detail     String?
-  resolution String?
-
-  reportedById String?
-  reportedBy   User?    @relation("GarmentExceptionReporter", fields: [reportedById], references: [id], onDelete: SetNull)
-  reportedAt   DateTime @default(now())
-
-  resolvedById String?
-  resolvedBy   User?     @relation("GarmentExceptionResolver", fields: [resolvedById], references: [id], onDelete: SetNull)
-  resolvedAt   DateTime?
-
-  @@index([branchId, status])
-  @@index([garmentId, status])
-  @@index([type, status])
-  @@map("garment_exceptions")
-}
-
-enum GarmentExceptionType {
-  MISSING
-  WRONG_ORDER
-  WRONG_GARMENT
-  DUPLICATE_SCAN
-  NOT_SCANNED
-}
-
-enum GarmentExceptionStatus {
-  OPEN
-  RESOLVED
-  DISMISSED
-}
-
-// ============================================================================
-// REAL ERP FINANCIAL ENGINE: BANK ACCOUNTS, CASH & CENTRAL LEDGER
-// ============================================================================
-
-model BankAccount {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id             String   @id @default(cuid())
-  branchId       String
-  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  accountName    String
-  bankName       String
-  accountNumber  String   // Masked in UI e.g. XXXX-XXXX-4321
-  ifscCode       String?
-  openingBalance Decimal  @default(0) @db.Decimal(14, 2)
-  currentBalance Decimal  @default(0) @db.Decimal(14, 2)
-  status         String   @default("ACTIVE") // ACTIVE | INACTIVE | CLOSED
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  transactions     BankTransaction[]
-  expenses         Expense[]
-  payments         Payment[]
-  supplierPayments SupplierPayment[]
-  reconciliations  Reconciliation[]
-
-  @@index([branchId])
-  @@index([firmId])
-  @@map("bank_accounts")
-}
-
-model CashAccount {
-  id             String   @id @default(cuid())
-  branchId       String   @unique
-  branch         Branch   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  openingBalance Decimal  @default(0) @db.Decimal(14, 2)
-  currentBalance Decimal  @default(0) @db.Decimal(14, 2)
-  updatedAt      DateTime @updatedAt
-
-  @@map("cash_accounts")
-}
-
-model FinancialLedger {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id              String                   @id @default(cuid())
-  branchId        String
-  branch          Branch                   @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  entryDate       DateTime                 @default(now())
-  reference       String                   // e.g. ORD-1024, PAY-1002, EXP-101, PUR-105, REC-101, TRF-102, ADJ-101
-  description     String
-  accountCategory FinancialAccountCategory @default(SALES)
-  debit           Decimal                  @default(0) @db.Decimal(14, 2)
-  credit          Decimal                  @default(0) @db.Decimal(14, 2)
-  balanceAfter    Decimal                  @default(0) @db.Decimal(14, 2)
-  paymentMethod   PaymentMethod            @default(CASH)
-
-  bankAccountId   String?
-  customerId      String?
-  supplierId      String?
-  orderId         String?
-  expenseId       String?
-  purchaseOrderId String?
-
-  isVoided        Boolean                  @default(false)
-  voidReason      String?
-  voidedAt        DateTime?
-  voidedById      String?
-
-  createdById     String?
-  createdBy       User?                    @relation("LedgerCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt       DateTime                 @default(now())
-
-  @@index([branchId, entryDate])
-  @@index([reference])
-  @@index([accountCategory])
+  @@index([serialNumber])
+  @@index([imei])
   @@index([customerId])
-  @@index([supplierId])
-  @@index([firmId])
-  @@map("financial_ledgers")
-}
-
-enum FinancialAccountCategory {
-  SALES
-  OTHER_INCOME
-  EXPENSE
-  CASH
-  BANK
-  RECEIVABLES
-  PAYABLES
-  PURCHASE
-  TRANSFER
-  ADJUSTMENT
-  OPENING_BALANCE
-}
-
-model BankTransaction {
-  id             String          @id @default(cuid())
-  bankAccountId  String
-  bankAccount    BankAccount     @relation(fields: [bankAccountId], references: [id], onDelete: Cascade)
-  branchId       String
-  branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  txnDate        DateTime        @default(now())
-  type           BankTxnType     @default(DEPOSIT)
-  amount         Decimal         @db.Decimal(14, 2)
-  balanceAfter   Decimal         @db.Decimal(14, 2)
-  reference      String?
-  description    String
-  transferPairId String?
-
-  createdById    String?
-  createdBy      User?           @relation("BankTxnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt      DateTime        @default(now())
-
-  @@index([bankAccountId, txnDate])
-  @@index([branchId])
-  @@map("bank_transactions")
-}
-
-enum BankTxnType {
-  DEPOSIT
-  WITHDRAWAL
-  TRANSFER_IN
-  TRANSFER_OUT
-}
-
-model CashTransaction {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id             String          @id @default(cuid())
-  branchId       String
-  branch         Branch          @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  txnDate        DateTime        @default(now())
-  type           CashTxnType     @default(CASH_IN)
-  amount         Decimal         @db.Decimal(14, 2)
-  balanceAfter   Decimal         @db.Decimal(14, 2)
-  reference      String?
-  reason         String
-  transferPairId String?
-
-  createdById    String?
-  createdBy      User?           @relation("CashTxnCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt      DateTime        @default(now())
-
-  @@index([branchId, txnDate])
-  @@index([firmId])
-  @@map("cash_transactions")
-}
-
-enum CashTxnType {
-  CASH_IN
-  CASH_OUT
-  DEPOSIT_TO_BANK
-  WITHDRAWAL_FROM_BANK
-  ADJUSTMENT
-  OPENING_BALANCE
-}
-
-model Reconciliation {
-  id              String             @id @default(cuid())
-  branchId        String
-  branch          Branch             @relation(fields: [branchId], references: [id], onDelete: Restrict)
-  type            ReconciliationType @default(CASH)
-  bankAccountId   String?
-  bankAccount     BankAccount?       @relation(fields: [bankAccountId], references: [id], onDelete: SetNull)
-  reconciledDate  DateTime           @default(now())
-  expectedBalance Decimal            @db.Decimal(14, 2)
-  actualBalance   Decimal            @db.Decimal(14, 2)
-  difference      Decimal            @db.Decimal(14, 2)
-  adjustmentNotes String
-
-  createdById     String?
-  createdBy       User?              @relation("ReconciliationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-
-  createdAt       DateTime           @default(now())
-
-  @@index([branchId, reconciledDate])
-  @@map("reconciliations")
-}
-
-enum ReconciliationType {
-  CASH
-  BANK
-}
-
-// ============================================================================
-// WHATSAPP OPENWA MESSAGING INTEGRATION
-// ============================================================================
-
-enum WhatsAppMessageStatus {
-  QUEUED
-  SENDING
-  SENT
-  DELIVERED
-  READ
-  FAILED
-}
-
-enum WhatsAppMessageType {
-  ORDER_CREATED
-  ORDER_READY
-  PAYMENT_RECEIVED
-  PAYMENT_PENDING
-  ORDER_DELIVERED
-  INVOICE
-  PAYMENT_RECEIPT
-  DELIVERY_RECEIPT
-  DELIVERY_CHALLAN
-  CUSTOM
-}
-
-model WhatsAppLog {
-  id            String                @id @default(cuid())
-  customerId    String?
-  customer      Customer?             @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  orderId       String?
-  order         Order?                @relation(fields: [orderId], references: [id], onDelete: SetNull)
-  phone         String
-  messageType   WhatsAppMessageType   @default(CUSTOM)
-  messageText   String                @db.Text
-  documentName  String?
-  documentUrl   String?
-  status        WhatsAppMessageStatus @default(QUEUED)
-  externalId    String?
-  errorMessage  String?
-  sentByUserId  String?
-  sentByUser    User?                 @relation("WhatsAppSentBy", fields: [sentByUserId], references: [id], onDelete: SetNull)
-  sentAt        DateTime              @default(now())
-  updatedAt     DateTime              @updatedAt
-
-  @@index([customerId])
-  @@index([orderId])
-  @@index([status])
-  @@index([sentAt])
-  @@map("whatsapp_logs")
+  @@index([invoiceId])
+  @@index([warrantyEnd])
+  @@index([firmId, status])
+  @@map("warranties")
 }
 
 model WhatsAppTemplate {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
+  firmId    String
+  firm      Firm                @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id        String              @id @default(cuid())
   code      WhatsAppMessageType
   name      String
   body      String              @db.Text
   isActive  Boolean             @default(true)
   updatedAt DateTime            @updatedAt
+
   @@unique([firmId, code])
   @@index([firmId])
-
   @@map("whatsapp_templates")
 }
 
-model WhatsAppSession {
-  firmId String
-  firm   Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
-  id              String    @id @default(cuid())
-  sessionName     String    @default("aurclean_session")
-  isConnected     Boolean   @default(false)
-  connectedNumber String?
-  qrCode          String?   @db.Text
-  apiStatus       String    @default("DISCONNECTED")
-  lastConnectedAt DateTime?
-  updatedAt       DateTime  @updatedAt
+model WhatsAppLog {
+  id           String              @id @default(cuid())
+  firmId       String
+  firm         Firm                @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  customerId   String?
+  customer     Customer?           @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  invoiceId    String?
+  quotationId  String?
+  phone        String
+  messageType  WhatsAppMessageType @default(CUSTOM)
+  messageText  String              @db.Text
+  documentName String?
+  documentUrl  String?
+  status       String              @default("QUEUED")
+  externalId   String?
+  errorMessage String?
+  sentByUserId String?
+  sentByUser   User?               @relation("WhatsAppSentBy", fields: [sentByUserId], references: [id], onDelete: SetNull)
+  sentAt       DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
 
-  @@unique([firmId, sessionName])
-  @@index([firmId])
-  @@map("whatsapp_sessions")
+  @@index([customerId])
+  @@index([invoiceId])
+  @@index([status])
+  @@index([firmId, sentAt])
+  @@map("whatsapp_logs")
 }
-

@@ -60,10 +60,7 @@ export async function loginAction(
   }
 
   // Checked ahead of signIn so a deactivated firm gets its own explicit
-  // message rather than the generic "not recognised" — NextAuth's
-  // CredentialsSignin error from a null authorize() result doesn't carry a
-  // reason through cleanly, so the same check that lives in auth.ts's
-  // authorize() is repeated here purely to surface the right copy.
+  // message rather than the generic "not recognised".
   const candidate = await prisma.user.findUnique({
     where: { accessCode },
     select: { firm: { select: { status: true } } },
@@ -105,11 +102,9 @@ export async function loginAction(
     });
   }
 
-  // Scanner is a dedicated, single-purpose surface: it always opens straight
-  // to the scan workspace, whatever page originally sent someone to sign in.
   const landing = user ? ROLE_LANDING_PATH[user.role] : "/dashboard";
   const target =
-    user?.role !== "SCANNER" &&
+    user?.role !== "SALES_STAFF" &&
     callbackUrl &&
     callbackUrl.startsWith("/") &&
     !callbackUrl.startsWith("//")

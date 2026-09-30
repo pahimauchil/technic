@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-const CHANNEL = "aura-data";
+const CHANNEL = "technic-data";
 
 /**
  * Tells every other tab that something changed, so they update at once rather

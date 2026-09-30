@@ -1,109 +1,145 @@
 import "server-only";
-import { headers } from "next/headers";
 
 import { prisma } from "@/lib/prisma";
+import type { TaxMode } from "@/generated/prisma/enums";
 
-export interface AuditInput {
-  userId?: string | null;
-  branchId?: string | null;
-  /**
-   * Explicit tenant for a platform-level event (e.g. a Firms-module action)
-   * that has no branchId to derive one from. Most callers omit this —
-   * recordAudit() derives firmId from branchId itself, since a branch only
-   * ever belongs to one firm and threading firmId through every one of the
-   * ~50 call sites across the app would be both invasive and easy to miss
-   * at a few of them, the exact class of bug that left every audit entry
-   * firmless until this was added.
-   */
-  firmId?: string | null;
-  action: string;
-  entity: string;
-  entityId?: string | null;
-  summary?: string | null;
-  before?: unknown;
-  after?: unknown;
+export type AuditActionName =
+  | "LOGIN"
+  | "LOGIN_FAILED"
+  | "LOGOUT"
+  | "ACCESS_CODE_USED"
+  | "ACCESS_CODE_FAILED"
+  | "ACCESS_CODE_CREATED"
+  | "ACCESS_CODE_UPDATED"
+  | "PRODUCT_CREATED"
+  | "PRODUCT_UPDATED"
+  | "PRODUCT_DELETED"
+  | "STOCK_ADJUSTED"
+  | "STOCK_TRANSFERRED"
+  | "PURCHASE_CREATED"
+  | "PURCHASE_RECEIVED"
+  | "PURCHASE_RETURNED"
+  | "SALE_CREATED"
+  | "SALE_RETURNED"
+  | "INVOICE_CREATED"
+  | "INVOICE_CANCELLED"
+  | "PAYMENT_CREATED"
+  | "QUOTATION_CREATED"
+  | "QUOTATION_CONVERTED"
+  | "CUSTOMER_CREATED"
+  | "SUPPLIER_CREATED"
+  | "USER_CREATED"
+  | "USER_UPDATED"
+  | "USER_PERMISSION_CHANGED"
+  | "FIRM_UPDATED"
+  | "WARRANTY_CLAIMED"
+  | "EXPENSE_CREATED"
+  | "SETTING_UPDATED";
+
+const AUDIT_ACTIONS: AuditActionName[] = [
+  "LOGIN", "LOGIN_FAILED", "LOGOUT", "ACCESS_CODE_USED", "ACCESS_CODE_FAILED",
+  "ACCESS_CODE_CREATED", "ACCESS_CODE_UPDATED", "PRODUCT_CREATED", "PRODUCT_UPDATED",
+  "PRODUCT_DELETED", "STOCK_ADJUSTED", "STOCK_TRANSFERRED", "PURCHASE_CREATED",
+  "PURCHASE_RECEIVED", "PURCHASE_RETURNED", "SALE_CREATED", "SALE_RETURNED",
+  "INVOICE_CREATED", "INVOICE_CANCELLED", "PAYMENT_CREATED", "QUOTATION_CREATED",
+  "QUOTATION_CONVERTED", "CUSTOMER_CREATED", "SUPPLIER_CREATED", "USER_CREATED",
+  "USER_UPDATED", "USER_PERMISSION_CHANGED", "FIRM_UPDATED", "WARRANTY_CLAIMED",
+  "EXPENSE_CREATED", "SETTING_UPDATED",
+];
+
+/** Human-readable label for the activity log. */
+export const AUDIT_ACTION_LABELS: Record<AuditActionName, string> = {
+  LOGIN: "Login",
+  LOGIN_FAILED: "Failed login",
+  LOGOUT: "Logout",
+  ACCESS_CODE_USED: "Access code used",
+  ACCESS_CODE_FAILED: "Failed access code",
+  ACCESS_CODE_CREATED: "Access code created",
+  ACCESS_CODE_UPDATED: "Access code updated",
+  PRODUCT_CREATED: "Product created",
+  PRODUCT_UPDATED: "Product updated",
+  PRODUCT_DELETED: "Product deleted",
+  STOCK_ADJUSTED: "Stock adjusted",
+  STOCK_TRANSFERRED: "Stock transferred",
+  PURCHASE_CREATED: "Purchase order created",
+  PURCHASE_RECEIVED: "Goods received",
+  PURCHASE_RETURNED: "Purchase return",
+  SALE_CREATED: "Sale created",
+  SALE_RETURNED: "Sales return",
+  INVOICE_CREATED: "Invoice created",
+  INVOICE_CANCELLED: "Invoice cancelled",
+  PAYMENT_CREATED: "Payment recorded",
+  QUOTATION_CREATED: "Quotation created",
+  QUOTATION_CONVERTED: "Quotation converted",
+  CUSTOMER_CREATED: "Customer created",
+  SUPPLIER_CREATED: "Supplier created",
+  USER_CREATED: "User created",
+  USER_UPDATED: "User updated",
+  USER_PERMISSION_CHANGED: "Permissions changed",
+  FIRM_UPDATED: "Firm updated",
+  WARRANTY_CLAIMED: "Warranty claimed",
+  EXPENSE_CREATED: "Expense recorded",
+  SETTING_UPDATED: "Settings updated",
+};
+
+/** The mode label appended to summaries so the audit trail shows the context. */
+export function modeLabel(mode: TaxMode): string {
+  return mode === "GST" ? "GST" : "non-GST";
 }
 
-/** Strip secrets before anything is written to the audit trail. */
-const REDACTED_KEYS = new Set([
-  "password",
-  "passwordHash",
-  "confirmPassword",
-  "accessCode",
-  "token",
-  "secret",
-  "apiKey",
-  "providerSignature",
-]);
+interface AuditInput {
+  action: AuditActionName;
+  entity: string;
+  entityId?: string | null;
+  summary?: string;
+  before?: unknown;
+  after?: unknown;
+  firmId?: string | null;
+  branchId?: string | null;
+  userId?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+}
 
-function sanitize(value: unknown): unknown {
-  if (value === null || value === undefined) return null;
-  if (Array.isArray(value)) return value.map(sanitize);
+const SECRET_KEYS = /pass(word)?|secret|token|hash|key|credential/i;
+
+/** Recursively redacts secret-looking values before anything reaches the log. */
+function redact(value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value;
+  if (depth > 6) return "[deep]";
+  if (Array.isArray(value)) return value.slice(0, 50).map((item) => redact(item, depth + 1));
   if (typeof value === "object") {
-    if (value instanceof Date) return value.toISOString();
-    const source = value as Record<string, unknown>;
-    const result: Record<string, unknown> = {};
-    for (const [key, val] of Object.entries(source)) {
-      if (REDACTED_KEYS.has(key)) {
-        result[key] = "[redacted]";
-        continue;
-      }
-      if (val !== null && typeof val === "object" && "toNumber" in (val as object)) {
-        result[key] = (val as { toNumber: () => number }).toNumber();
-        continue;
-      }
-      result[key] = sanitize(val);
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      out[key] = SECRET_KEYS.test(key) ? "[redacted]" : redact(val, depth + 1);
     }
-    return result;
+    return out;
   }
   return value;
 }
 
 /**
- * Writes an audit entry. Audit failures must never break the business
- * operation that triggered them, so errors are swallowed and logged.
+ * Writes an audit row. Never throws into the caller's flow — a failed audit
+ * write is logged but must not roll back the business operation it observed.
  */
 export async function recordAudit(input: AuditInput): Promise<void> {
   try {
-    let ipAddress: string | null = null;
-    let userAgent: string | null = null;
-
-    try {
-      const headerList = await headers();
-      ipAddress =
-        headerList.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-        headerList.get("x-real-ip") ??
-        null;
-      userAgent = headerList.get("user-agent");
-    } catch {
-      // Outside a request scope (e.g. seeding) — headers are unavailable.
-    }
-
-    let firmId = input.firmId ?? null;
-    if (!firmId && input.branchId) {
-      const branch = await prisma.branch.findUnique({
-        where: { id: input.branchId },
-        select: { firmId: true },
-      });
-      firmId = branch?.firmId ?? null;
-    }
-
     await prisma.auditLog.create({
       data: {
-        userId: input.userId ?? null,
-        branchId: input.branchId ?? null,
-        firmId,
         action: input.action,
         entity: input.entity,
         entityId: input.entityId ?? null,
         summary: input.summary ?? null,
-        before: input.before === undefined ? undefined : (sanitize(input.before) as never),
-        after: input.after === undefined ? undefined : (sanitize(input.after) as never),
-        ipAddress,
-        userAgent,
+        before: input.before === undefined ? undefined : (redact(input.before) as never),
+        after: input.after === undefined ? undefined : (redact(input.after) as never),
+        firmId: input.firmId ?? null,
+        branchId: input.branchId ?? null,
+        userId: input.userId ?? null,
+        ipAddress: input.ipAddress ?? null,
+        userAgent: input.userAgent ?? null,
       },
     });
   } catch (error) {
-    console.error("[audit] failed to record entry", error);
+    console.error("[audit] failed to record", input.action, error);
   }
 }

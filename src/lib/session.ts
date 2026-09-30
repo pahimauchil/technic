@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isGlobalRole, isPlatformRole, type PermissionCode } from "@/lib/rbac";
-import type { UserRole } from "@/generated/prisma/enums";
+import type { TaxMode, UserRole } from "@/generated/prisma/enums";
 
 export interface SessionUser {
   id: string;
@@ -24,12 +24,12 @@ export interface SessionUser {
    * The firm actually being operated in for this request. Equal to firmId
    * for every ordinary firm user (fixed, never switchable). For
    * PLATFORM_ADMIN this is whichever firm they last "entered" via the Firms
-   * module's switcher — null until they do, in which case operational
-   * pages have nothing to scope to and requireFirm() below sends them back
-   * to /firms rather than ever falling through to an unscoped query.
+   * module's switcher — null until they do.
    */
   activeFirmId: string | null;
   activeFirmName: string | null;
+  /** The operational tax mode for this session: GST or NON_GST. */
+  accessMode: TaxMode;
 }
 
 export class AuthorizationError extends Error {
@@ -54,10 +54,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   if (firmId) {
     // JWT sessions are stateless, so a firm deactivated after a user's
     // token was issued would otherwise keep working until the token next
-    // refreshes. Re-verified on every request so login, API access, order
-    // creation and scanning all stop immediately for a deactivated firm's
-    // users, per the multi-tenant spec's deactivation requirement — without
-    // ever deleting the firm's existing data.
+    // refreshes. Re-verified on every request.
     const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { status: true } });
     if (!firm || firm.status !== "ACTIVE") return null;
   }
@@ -77,6 +74,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     firmName: session.user.firmName ?? null,
     activeFirmId: session.user.activeFirmId ?? null,
     activeFirmName: session.user.activeFirmName ?? null,
+    accessMode: (session.user.accessMode as TaxMode) === "GST" ? "GST" : "NON_GST",
   };
 }
 
@@ -124,8 +122,7 @@ export async function authorize(
 /**
  * The tenant boundary every operational query must filter by. Never reads
  * from a request body, query string, or client-supplied value — always the
- * server-resolved session. Throws for a PLATFORM_ADMIN who hasn't entered a
- * firm yet, rather than ever letting a caller fall back to "no filter".
+ * server-resolved session.
  */
 export function requireFirmId(user: SessionUser): string {
   if (!user.activeFirmId) {
@@ -152,8 +149,7 @@ export async function requirePermissionInFirm(
  * (or all of them); everyone else is pinned to the branch they belong to,
  * whatever the request asks for. `firmId` is always the caller's own
  * resolved tenant — every query built from this result MUST also filter by
- * it, since `branchId: undefined` (the "all branches" case) applies no
- * branch filter at all and would otherwise return every firm's rows.
+ * it.
  */
 export function resolveBranchScope(
   user: SessionUser,
@@ -178,8 +174,7 @@ export function resolveBranchScope(
 /**
  * Throws if a user tries to touch a record belonging to another branch.
  * Firm-safe by construction: a user's own branchId is only ever assigned
- * from a branch in their own firm (enforced at staff-creation time), so a
- * specific branchId can never belong to another tenant.
+ * from a branch in their own firm (enforced at staff-creation time).
  */
 export function assertBranchAccess(user: SessionUser, branchId: string | null) {
   if (isGlobalRole(user.role)) return;
@@ -191,10 +186,7 @@ export function assertBranchAccess(user: SessionUser, branchId: string | null) {
 
 /**
  * Throws (403-equivalent) if a fetched record's own firmId doesn't match
- * the caller's active firm. This is the direct-by-id ownership check the
- * multi-tenant spec requires: GET /api/orders/123 must verify
- * order.firmId === currentUser.firmId before returning anything, no matter
- * how the id was supplied.
+ * the caller's active firm.
  */
 export function assertFirmAccess(user: SessionUser, recordFirmId: string | null | undefined) {
   const firmId = requireFirmId(user);
@@ -206,36 +198,47 @@ export function assertFirmAccess(user: SessionUser, recordFirmId: string | null 
 /**
  * The branch a newly created record should be filed under. For a global
  * role that requested a specific branch, the branch is verified to belong
- * to the caller's own firm before being trusted — otherwise a manipulated
- * branchId could file a record under another firm's branch while its
- * firmId (set separately via requireFirmId) is the caller's own, breaking
- * the "a branchId always belongs to its own firmId" invariant other checks
- * in this file rely on.
+ * to the caller's own firm before being trusted.
  */
 export async function requireWriteBranch(
   user: SessionUser,
   requestedBranchId?: string | null,
 ): Promise<string> {
+  const firmId = requireFirmId(user);
+
   if (isGlobalRole(user.role)) {
     const branchId = requestedBranchId ?? user.branchId;
     if (!branchId) throw new AuthorizationError("A branch must be selected");
-    if (requestedBranchId) {
-      const firmId = requireFirmId(user);
-      const branch = await prisma.branch.findUnique({
-        where: { id: branchId },
-        select: { firmId: true },
-      });
-      if (!branch || branch.firmId !== firmId) {
-        throw new AuthorizationError("That branch does not belong to your organization");
-      }
+    // Always validate: the session fallback can go stale after data resets.
+    const branch = await prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { firmId: true },
+    });
+    if (!branch || branch.firmId !== firmId) {
+      throw new AuthorizationError(
+        requestedBranchId
+          ? "That branch does not belong to your organization"
+          : "Your saved work location is no longer valid — sign out and back in",
+      );
     }
     return branchId;
   }
+
   if (!user.branchId) {
     throw new AuthorizationError("Your account is not assigned to a branch");
   }
   if (requestedBranchId && requestedBranchId !== user.branchId) {
     throw new AuthorizationError("You can only create records for your own branch");
+  }
+  // Validate the account's branch still exists in this firm.
+  const branch = await prisma.branch.findUnique({
+    where: { id: user.branchId },
+    select: { firmId: true },
+  });
+  if (!branch || branch.firmId !== firmId) {
+    throw new AuthorizationError(
+      "Your work location is no longer valid — ask an administrator to check your account",
+    );
   }
   return user.branchId;
 }

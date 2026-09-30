@@ -7,13 +7,13 @@ import { prisma } from "@/lib/prisma";
 import { resolvePermissions } from "@/lib/permissions.server";
 import { isPlatformRole } from "@/lib/rbac";
 import type { PermissionCode } from "@/lib/rbac";
-import type { UserRole } from "@/generated/prisma/enums";
+import type { TaxMode, UserRole } from "@/generated/prisma/enums";
 
 const credentialsSchema = z.object({
   accessCode: z.string().trim().min(1),
 });
 
-export const { handlers, auth, signIn, signOut } = NextAuth({
+export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -35,8 +35,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
         if (!user || user.status !== "ACTIVE") return null;
 
-        // A firm's users cannot sign in while their firm is deactivated —
-        // existing data stays intact, but no session can be created.
+        // A firm's users cannot sign in while their firm is deactivated.
         if (user.firm && user.firm.status !== "ACTIVE") return null;
 
         const permissions = await resolvePermissions(user.id, user.role);
@@ -64,6 +63,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // active until they explicitly enter one from the Firms module.
           activeFirmId: isPlatformRole(user.role) ? null : user.firmId,
           activeFirmName: isPlatformRole(user.role) ? null : (user.firm?.name ?? null),
+          // Sessions start in the least-privileged tax mode; entering a GST
+          // access code (or choosing the mode in the Firms switcher) raises it.
+          accessMode: "NON_GST" as TaxMode,
         };
       },
     }),
@@ -83,12 +85,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.firmName = user.firmName;
         token.activeFirmId = user.activeFirmId;
         token.activeFirmName = user.activeFirmName;
+        token.accessMode = (user as { accessMode?: TaxMode }).accessMode ?? "NON_GST";
       }
 
       // Re-read role/branch/permissions when the client explicitly asks for a
       // refresh (e.g. after an admin changes this user's access), and handle
-      // the Firms-module "enter firm" switch (PLATFORM_ADMIN only — a
-      // regular firm user's token.firmId never changes here).
+      // the Firms-module "enter firm" switch (PLATFORM_ADMIN only) plus the
+      // access-code gate's mode escalation.
       if (trigger === "update" && token.id) {
         const fresh = await prisma.user.findUnique({
           where: { id: token.id as string },
@@ -107,24 +110,35 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           token.firmName = fresh.firm?.name ?? null;
         }
 
-        const requestedFirmId = (updateData as { activeFirmId?: string | null } | undefined)?.activeFirmId;
+        const payload = updateData as
+          | { activeFirmId?: string | null; accessMode?: TaxMode }
+          | undefined;
+
+        const requestedFirmId = payload?.activeFirmId;
         if (requestedFirmId !== undefined && isPlatformRole(token.role as UserRole)) {
           if (requestedFirmId === null) {
             token.activeFirmId = null;
             token.activeFirmName = null;
+            token.accessMode = "NON_GST";
           } else {
             const targetFirm = await prisma.firm.findUnique({
               where: { id: requestedFirmId },
               select: { id: true, name: true, status: true },
             });
-            // Silently ignored (not thrown) if the firm doesn't exist —
-            // this is a session-update trigger, not a page action; the
-            // Firms-module UI itself validates before calling it.
             if (targetFirm && targetFirm.status === "ACTIVE") {
               token.activeFirmId = targetFirm.id;
               token.activeFirmName = targetFirm.name;
             }
           }
+        }
+
+        // Mode escalation. GST can only be granted through the access-code
+        // gate action, which validated the code against the firm before
+        // asking for this update — the gate is the only place that may send
+        // accessMode: "GST".
+        const requestedMode = payload?.accessMode;
+        if (requestedMode !== undefined) {
+          token.accessMode = requestedMode === "GST" ? "GST" : "NON_GST";
         }
       }
 
@@ -143,6 +157,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         session.user.firmName = (token.firmName as string | null) ?? null;
         session.user.activeFirmId = (token.activeFirmId as string | null) ?? null;
         session.user.activeFirmName = (token.activeFirmName as string | null) ?? null;
+        session.user.accessMode = ((token.accessMode as TaxMode) === "GST" ? "GST" : "NON_GST") as TaxMode;
       }
       return session;
     },

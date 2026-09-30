@@ -32,12 +32,12 @@ export async function listAuditLogs(filters: AuditLogFilters): Promise<AuditLogR
     where: {
       firmId: filters.firmId,
       ...(filters.branchId ? { branchId: filters.branchId } : {}),
-      ...(filters.action ? { action: filters.action } : {}),
+      // action is an enum — filter by exact value, not a contains match.
+      ...(filters.action ? { action: filters.action as never } : {}),
       ...(filters.userId ? { userId: filters.userId } : {}),
       ...(filters.search
         ? {
             OR: [
-              { action: { contains: filters.search, mode: "insensitive" } },
               { entity: { contains: filters.search, mode: "insensitive" } },
               { summary: { contains: filters.search, mode: "insensitive" } },
               { user: { name: { contains: filters.search, mode: "insensitive" } } },

@@ -9,14 +9,20 @@ import { visibleSections, type NavItem } from "@/components/layout/nav-config";
 import { ROLE_LABELS, type PermissionCode } from "@/lib/rbac";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { AurcleanLogo } from "@/components/shared/aurclean-logo";
+import { TechnicLogo } from "@/components/shared/technic-logo";
 import type { UserRole } from "@/generated/prisma/enums";
 
 interface SidebarProps {
   permissions: PermissionCode[];
   open: boolean;
   onClose: () => void;
-  user: { name: string; email: string; role: UserRole; branchName: string | null };
+  user: {
+    name: string;
+    email: string;
+    role: UserRole;
+    branchName: string | null;
+    firmName: string | null;
+  };
 }
 
 function isActive(pathname: string, item: NavItem) {
@@ -46,8 +52,8 @@ export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
         )}
       >
         <div className="flex h-16 shrink-0 items-center justify-between gap-2 px-4">
-          <Link href="/dashboard" className="flex items-center gap-2.5 rounded-xl px-1 py-1 transition-opacity hover:opacity-90">
-            <AurcleanLogo size="sm" variant="full" theme="light" />
+          <Link href="/dashboard" className="flex items-center rounded-xl px-1 py-1 transition-opacity hover:opacity-90">
+            <TechnicLogo size={26} theme="light" />
           </Link>
           <Button
             variant="ghost"
@@ -74,10 +80,7 @@ export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
         </nav>
 
         <div className="shrink-0 border-t border-sidebar-border p-3">
-          <Link
-            href="/profile"
-            className="flex items-center gap-2.5 rounded-xl px-2 py-2 transition-colors hover:bg-sidebar-hover"
-          >
+          <div className="flex items-center gap-2.5 rounded-xl px-2 py-2">
             <span className="relative shrink-0">
               <Avatar className="size-9">
                 <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
@@ -96,7 +99,7 @@ export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
                 {user.branchName ? ` · ${user.branchName}` : ""}
               </p>
             </div>
-          </Link>
+          </div>
         </div>
       </aside>
     </>

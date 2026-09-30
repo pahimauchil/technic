@@ -4,17 +4,16 @@ import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
 import { prisma } from "@/lib/prisma";
-import { formatCurrency, amountInWords as amountInWordsHelper } from "@/lib/money";
+import { amountInWords as amountInWordsHelper } from "@/lib/money";
 import { formatDate, formatTime } from "@/lib/dates";
 
 // Traditional, print-safe business-document palette — pure white page, black
-// body text, AURCLEAN forest green for the accents (table headers, the
-// document title, the separator rule, and the highlighted total row). No
-// grays, cards, or shadows: this is meant to look like a printed accounting
-// document, not a web dashboard panel.
+// body text, Technic forest green for the accents (table headers, the
+// document title, the separator rule, and the highlighted total row).
 export const COLORS = {
-  primary: "#0a3b2c", // AURCLEAN forest green — matches the app's own --brand token
-  primaryDark: "#062418",
+  primary: "#123524", // Technic forest green — matches the app's --brand token
+  primaryDark: "#0b2417",
+  accent: "#e31e2d", // Technic signal red — used sparingly (cancelled stamp)
   ink: "#000000",
   muted: "#3f3f3f",
   border: "#9aa39c",
@@ -22,10 +21,8 @@ export const COLORS = {
 };
 
 // PDFKit's 14 built-in base fonts (Helvetica, etc.) use WinAnsiEncoding,
-// which has no glyph for the Rupee sign (U+20B9, standardized in 2010) —
-// every ₹ in a document rendered with them prints as a broken superscript
-// "¹". DejaVu Sans does have the glyph and is bundled below so this holds
-// regardless of what fonts happen to be installed on the host OS.
+// which has no glyph for the Rupee sign (U+20B9) — every ₹ prints as a
+// broken glyph. DejaVu Sans has the glyph and is bundled below.
 const FONT_REGULAR = "DejaVuSans";
 const FONT_BOLD = "DejaVuSans-Bold";
 
@@ -45,10 +42,7 @@ export interface BranchProfile {
 /**
  * Every PDF must reflect only the firm it was generated for — never
  * whichever firm's settings happened to be read first. Callers always pass
- * the firmId straight from the record the document is for (invoice.firmId,
- * challan.firmId, ...), never from the viewing user's session, so a
- * PLATFORM_ADMIN previewing across firms can never leak one firm's branding
- * onto another firm's document.
+ * the firmId straight from the record the document is for.
  */
 export async function getCompanyProfile(firmId: string): Promise<CompanyProfile> {
   const settings = await prisma.setting.findMany({
@@ -59,25 +53,52 @@ export async function getCompanyProfile(firmId: string): Promise<CompanyProfile>
   });
 
   const map = new Map(settings.map((s) => [s.key, s.value]));
+  const firm = await prisma.firm.findUnique({
+    where: { id: firmId },
+    select: {
+      name: true,
+      legalName: true,
+      displayName: true,
+      gstin: true,
+      pan: true,
+      addressLine: true,
+      city: true,
+      state: true,
+      pincode: true,
+      phone: true,
+      email: true,
+      website: true,
+    },
+  });
+
+  const pick = (settingKey: string, firmValue: string | null | undefined) =>
+    map.get(settingKey) || firmValue || "";
 
   return {
-    name: map.get("company_name") || map.get("app_name") || "Aurclean - The Organic Laundry",
-    // No fabricated address/phone/GSTIN here: an unconfigured field is left
-    // blank (and the footer omits it) rather than printing a placeholder
-    // that reads as a real registered business number on every document.
-    address: map.get("company_address") || "",
-    phone: map.get("company_phone") || "",
-    email: map.get("company_email") || "aurclean.info@gmail.com",
-    website: map.get("company_website") || "",
-    gstin: map.get("company_gstin") || "",
+    name:
+      map.get("company_name") ||
+      firm?.displayName ||
+      firm?.name ||
+      "Technic Technologies",
+    address:
+      map.get("company_address") ||
+      [firm?.addressLine, firm?.city, firm?.state, firm?.pincode].filter(Boolean).join(", "),
+    phone: pick("company_phone", firm?.phone),
+    email: pick("company_email", firm?.email),
+    website: pick("company_website", firm?.website),
+    gstin: map.get("company_gstin") || firm?.gstin || "",
+    pan: firm?.pan || "",
     logoUrl: map.get("company_logo") || "/logo.png",
-    footerText: map.get("document_footer_text") || "Thank you for choosing AURCLEAN. Dedicated to laundry excellence.",
+    footerText:
+      map.get("document_footer_text") ||
+      "Thank you for your business. Goods once sold are subject to the warranty terms of the respective manufacturer.",
     termsConditions:
       map.get("document_terms") ||
-      "1. No guarantee against colour loss, bleeding & shrinkage.\n2. In case of rare damage, the company's liability shall be limited to a maximum of eight (8) times the processing (laundry/dry clean) cost.",
+      "1. Goods once sold will not be taken back.\n2. Warranty as per the manufacturer's terms; subject to their service centre policy.\n3. Interest at 18% p.a. is charged on overdue balances.\n4. Subject to local jurisdiction only.",
     invoicePrefix: map.get("invoice_prefix") || "INV",
-    challanPrefix: map.get("challan_prefix") || "DC",
-    receiptPrefix: map.get("receipt_prefix") || "REC",
+    quotationPrefix: map.get("quotation_prefix") || "QT",
+    purchasePrefix: map.get("purchase_prefix") || "PO",
+    bankDetails: map.get("company_bank_details") || "",
   };
 }
 
@@ -105,11 +126,11 @@ export interface SummaryLine {
 }
 
 /**
- * Shared PDFKit document-assembly system for every AURCLEAN business
- * document (Bill of Supply, Delivery Challan, Payment Receipt, Delivery
- * Receipt). One component per visual block (header, title, info columns,
- * items table, financial summary, signature) so the four templates configure
- * the same building blocks instead of four unrelated implementations.
+ * Shared PDFKit document-assembly system for every Technic Technologies
+ * business document (Tax Invoice, Non-GST Bill, Quotation, Purchase Order,
+ * Payment Receipt). One component per visual block (header, title, info
+ * columns, items table, financial summary, signature) so each template
+ * configures the same building blocks.
  */
 export class PDFDocumentBuilder {
   doc: InstanceType<typeof PDFDocument>;
@@ -120,22 +141,9 @@ export class PDFDocumentBuilder {
   contentWidth: number;
   currentY: number;
 
-  /**
-   * The lowest y body content may reach before a new page is started. Kept
-   * a few points above the document's own bottom margin (pageHeight -
-   * margin) on purpose: that exact boundary is also where PDFKit's own
-   * internal overflow check lives, and it triggers on the real rendered
-   * height of a text call, not on this class's own (necessarily
-   * approximate) heightOfString estimates. Landing a block flush against
-   * that line — where a sub-point rounding difference between the two is
-   * enough to tip it over — is what silently added a blank trailing page
-   * with only a footer on it here before; the margin below keeps every
-   * block's real footprint clear of that boundary.
-   */
   readonly maxY: number;
   private static readonly BOTTOM_SAFETY = 20;
 
-  /** Re-invoked on every page after the first, to repeat the table header. */
   private onNewPage: (() => void) | null = null;
 
   constructor(company: CompanyProfile) {
@@ -147,9 +155,9 @@ export class PDFDocumentBuilder {
       margin: this.margin,
       bufferPages: true,
       info: {
-        Title: "AURCLEAN Document",
+        Title: "Technic Technologies Document",
         Author: company.name,
-        Creator: "AURCLEAN ERP Document System",
+        Creator: "Technic Technologies ERP",
       },
     });
     this.currentY = this.margin;
@@ -182,11 +190,6 @@ export class PDFDocumentBuilder {
       .stroke();
   }
 
-  /**
-   * Starts a new page if `height` of content would cross maxY. Returns
-   * whether a page break happened, since callers with their own running `y`
-   * (rather than `this.currentY`) need to reset it themselves.
-   */
   private ensureSpace(height: number, y?: number): boolean {
     const at = y ?? this.currentY;
     if (at + height <= this.maxY) return false;
@@ -198,47 +201,43 @@ export class PDFDocumentBuilder {
 
   /**
    * Company details top-left, logo top-right (aspect ratio always
-   * preserved — PDFKit's `fit` option scales without stretching), a
-   * centered document title, then a thin green rule.
+   * preserved), then a thin green rule.
    */
   renderCompanyHeader(branch: BranchProfile) {
     const startY = this.currentY;
-    const rightColWidth = 90;
+    const rightColWidth = 96;
     const leftColWidth = this.contentWidth - rightColWidth - 12;
 
-    this.text(`${this.company.name} - ${branch.name}`, this.margin, startY, {
+    this.text(this.company.name, this.margin, startY, {
       bold: true,
       size: 12.5,
       width: leftColWidth,
     });
 
     let y = startY + 16;
-    const addressParts = [branch.addressLine, branch.city, branch.state, branch.pincode].filter(Boolean);
-    if (addressParts.length > 0) {
-      this.text(addressParts.join(", "), this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
+    const firmLines = [
+      this.company.address || branch.addressLine,
+      branch.addressLine && this.company.address ? branch.name : null,
+    ].filter(Boolean);
+    if (firmLines.length > 0) {
+      this.text(firmLines.join(" · "), this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
       y += 12;
     }
 
-    const phone = branch.phone || this.company.phone;
-    if (phone) {
-      this.text(`Phone no.: ${phone}`, this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
+    const gstinLine = this.company.gstin ? `GSTIN: ${this.company.gstin}` : "";
+    const contactParts = [branch.phone || this.company.phone, branch.email || this.company.email].filter(Boolean);
+    if (gstinLine) {
+      this.text(gstinLine, this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
       y += 12;
     }
-
-    const email = branch.email || this.company.email;
-    if (email) {
-      this.text(`Email: ${email}`, this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
+    if (contactParts.length > 0) {
+      this.text(contactParts.join("  ·  "), this.margin, y, { size: 8.5, color: COLORS.muted, width: leftColWidth });
       y += 12;
     }
 
     // Logo, top-right, aspect-ratio preserved and never stretched.
-    const logoBox = { w: rightColWidth, h: 52 };
+    const logoBox = { w: rightColWidth, h: 34 };
     const logoX = this.pageWidth - this.margin - logoBox.w;
-    // A print-resolution copy (300x300 — ~400dpi at this box's printed
-    // size), not the source public/logo.png (1254x1254): PDFKit embeds
-    // images verbatim with no downscaling, so using the full source made
-    // every generated document balloon to over a megabyte for no visible
-    // sharpness gain.
     let logoPath = path.join(process.cwd(), "public", "logo-pdf.png");
     if (!fs.existsSync(logoPath)) {
       logoPath = path.join(process.cwd(), "public", "logo.png");
@@ -247,8 +246,7 @@ export class PDFDocumentBuilder {
       try {
         this.doc.image(logoPath, logoX, startY, { fit: [logoBox.w, logoBox.h], align: "right" });
       } catch {
-        // Malformed/unreadable logo file — the rest of the document still
-        // renders correctly without it.
+        // Malformed logo file — the rest of the document still renders.
       }
     }
 
@@ -257,7 +255,7 @@ export class PDFDocumentBuilder {
     this.currentY += 16;
   }
 
-  /** Large centered bold green document title, e.g. "BILL OF SUPPLY". */
+  /** Large centered bold green document title, e.g. "TAX INVOICE". */
   renderDocumentTitle(title: string) {
     this.text(title.toUpperCase(), this.margin, this.currentY, {
       bold: true,
@@ -270,23 +268,11 @@ export class PDFDocumentBuilder {
     this.currentY += 26;
   }
 
-  /**
-   * N evenly-spaced compact info columns (e.g. Bill To / Transportation
-   * Details / Invoice Details, or the Delivery Challan's four columns).
-   */
   renderInfoColumns(columns: InfoColumn[]) {
     const gap = 10;
     const colWidth = (this.contentWidth - gap * (columns.length - 1)) / columns.length;
     const startY = this.currentY;
 
-    // The heading itself can wrap to two lines in a narrow column (e.g. a
-    // four-column challan header) — its own height must be included before
-    // the first content line starts, or the two visually overlap. Line 0 of
-    // the content is rendered bold (it's the customer/branch name), and
-    // bold glyphs are wider than regular ones — measuring it with the
-    // regular font under-counts how many lines it actually wraps to, which
-    // is exactly what caused the next line to overlap it. Always measure
-    // with the same font the line is rendered in.
     const lineHeight = (line: string, bold: boolean) =>
       this.doc
         .font(bold ? FONT_BOLD : FONT_REGULAR)
@@ -324,12 +310,6 @@ export class PDFDocumentBuilder {
     this.currentY = dividerY + 12;
   }
 
-  /**
-   * Full-width items table: solid green header with white bold text, plain
-   * white rows with a hairline rule under each, and an optional TOTAL row
-   * using the same column grid so figures line up exactly. Repeats the
-   * header automatically on any page the table spills onto.
-   */
   renderItemsTable(columns: PDFTableColumn[], rows: PDFTableRow[], totalRow?: PDFTableRow) {
     const widths = columns.map((col) => (col.width / 100) * this.contentWidth);
     const headerHeight = 20;
@@ -354,9 +334,6 @@ export class PDFDocumentBuilder {
       this.currentY = this.margin + headerHeight;
     };
 
-    // ensureSpace's onNewPage callback already draws the header row and
-    // advances currentY when it breaks the page here — only draw it
-    // ourselves when no break happened, or the header would render twice.
     const brokeAtStart = this.ensureSpace(headerHeight, this.currentY);
     if (!brokeAtStart) {
       renderHeaderRow(this.currentY);
@@ -365,7 +342,7 @@ export class PDFDocumentBuilder {
     let y = this.currentY;
 
     const rowHeight = (row: PDFTableRow, bold = false) => {
-      const itemColIdx = columns.findIndex((c) => c.id === "item" || c.id === "garmentCode" || c.id === "name");
+      const itemColIdx = columns.findIndex((c) => c.id === "item" || c.id === "description");
       const col = itemColIdx >= 0 ? columns[itemColIdx] : columns[0];
       const w = itemColIdx >= 0 ? widths[itemColIdx] : widths[0];
       const val = row[col.id] !== undefined ? String(row[col.id]) : "";
@@ -392,9 +369,6 @@ export class PDFDocumentBuilder {
           size: 8.5,
           width: w - 12,
           align: col.align || "left",
-          // The item column sized this row and is allowed its full
-          // height; every other column is capped and ellipsized so an
-          // unexpectedly long value can never bleed into the row below.
           ...(isItemCol ? {} : { height: rh - 9, ellipsis: true }),
         });
         x += w;
@@ -439,16 +413,12 @@ export class PDFDocumentBuilder {
     this.currentY = y + 14;
   }
 
-  /**
-   * Financial documents (Bill of Supply, Payment Receipt): amount-in-words
-   * and terms on the left, a right-aligned key/value stack ending in a
-   * green-highlighted headline total on the right.
-   */
   renderFinancialSummary(params: {
     amountWordsLabel: string;
     amountWords: string;
     terms?: string;
     lines: SummaryLine[];
+    bankDetails?: string;
   }) {
     const leftWidth = this.contentWidth * 0.56;
     const rightWidth = this.contentWidth - leftWidth - 16;
@@ -457,30 +427,34 @@ export class PDFDocumentBuilder {
     const lineRowHeight = (line: SummaryLine) => (line.highlight ? 24 : 15);
     const rightHeight = params.lines.reduce((sum, l) => sum + lineRowHeight(l), 0) + 4;
 
-    // A large total spelled out ("Ten Thousand Nine Hundred Eighteen
-    // Rupees...") can wrap to two lines — measure it so "Terms and
-    // Conditions" starts below it instead of on top of it.
     const amountWordsHeight = this.doc.font(FONT_REGULAR).fontSize(9).heightOfString(params.amountWords, { width: leftWidth });
+    const bankHeight = params.bankDetails
+      ? this.doc.font(FONT_REGULAR).fontSize(8).heightOfString(params.bankDetails, { width: leftWidth }) + 14
+      : 0;
     const termsHeight = params.terms
       ? this.doc.font(FONT_REGULAR).fontSize(7.5).heightOfString(params.terms, { width: leftWidth }) + 24
       : 0;
-    const leftHeight = 12 + amountWordsHeight + 8 + termsHeight;
+    const leftHeight = 12 + amountWordsHeight + 8 + bankHeight + termsHeight;
 
     const blockHeight = Math.max(leftHeight, rightHeight);
     this.ensureSpace(blockHeight);
     const startY = this.currentY;
 
-    // Left: Amount in Words + Terms & Conditions
     this.text(params.amountWordsLabel, this.margin, startY, { bold: true, size: 8.5 });
     this.text(params.amountWords, this.margin, startY + 12, { size: 9, width: leftWidth });
 
-    if (params.terms) {
-      const termsStartY = startY + 12 + amountWordsHeight + 8;
-      this.text("Terms and Conditions", this.margin, termsStartY, { bold: true, size: 8.5 });
-      this.text(params.terms, this.margin, termsStartY + 12, { size: 7.5, color: COLORS.muted, width: leftWidth });
+    let leftY = startY + 12 + amountWordsHeight + 8;
+    if (params.bankDetails) {
+      this.text("Bank Details", this.margin, leftY, { bold: true, size: 8.5 });
+      this.text(params.bankDetails, this.margin, leftY + 12, { size: 8, width: leftWidth });
+      leftY += bankHeight;
     }
 
-    // Right: key/value stack with a highlighted total row
+    if (params.terms) {
+      this.text("Terms and Conditions", this.margin, leftY, { bold: true, size: 8.5 });
+      this.text(params.terms, this.margin, leftY + 12, { size: 7.5, color: COLORS.muted, width: leftWidth });
+    }
+
     let ry = startY;
     params.lines.forEach((line) => {
       const h = lineRowHeight(line);
@@ -509,10 +483,6 @@ export class PDFDocumentBuilder {
     this.currentY = startY + blockHeight + 14;
   }
 
-  /**
-   * Non-financial documents (Delivery Challan, Delivery Receipt): terms or
-   * handling notes only — no subtotal/tax/paid/balance ever appears here.
-   */
   renderNotesBlock(terms?: string) {
     if (!terms) return;
     const width = this.contentWidth;
@@ -524,18 +494,10 @@ export class PDFDocumentBuilder {
     this.currentY = y + height;
   }
 
-  /**
-   * Signature slots. A single signer (the Bill of Supply / Payment Receipt
-   * pattern) sits bottom-right; multiple signers (Delivery Challan /
-   * Delivery Receipt) spread evenly across the full width.
-   */
   renderSignatureBlock(signers: Array<{ title: string; name?: string }>, align: "right" | "spread" = "right") {
     if (align === "right" && signers.length === 1) {
       const boxWidth = 220;
       const signer = signers[0];
-      // A long branded name ("For: Aura Laundry - Koramangala Branch") can
-      // wrap to two lines — measure it so the line and label underneath
-      // are placed below it, never on top of it.
       const nameText = signer.name ? `For: ${signer.name}` : "";
       const nameHeight = nameText
         ? this.doc.font(FONT_BOLD).fontSize(9).heightOfString(nameText, { width: boxWidth })
@@ -591,23 +553,32 @@ export class PDFDocumentBuilder {
     this.currentY = y + blockHeight;
   }
 
-  /**
-   * Finalizes the document. Page numbers are only stamped when the
-   * document actually spans more than one page — a single-page document
-   * (the common case for a short item list) gets no footer clutter at all.
-   */
+  /** A red CANCELLED stamp across the page body. */
+  renderCancelledStamp(reason: string) {
+    const page = this.doc.bufferedPageRange().count - 1;
+    this.doc.switchToPage(page);
+    const cx = this.pageWidth / 2;
+    const cy = this.pageHeight / 2;
+    this.doc
+      .font(FONT_BOLD)
+      .fontSize(48)
+      .fillColor(COLORS.accent)
+      .opacity(0.16)
+      .text("CANCELLED", cx - 160, cy - 30, { characterSpacing: 4, lineBreak: false });
+    this.doc
+      .font(FONT_BOLD)
+      .fontSize(10)
+      .opacity(0.16)
+      .text(reason, cx - 160, cy + 24, { width: 320, align: "center", lineBreak: true });
+    this.doc.opacity(1);
+  }
+
   async build(): Promise<Buffer> {
     const pages = this.doc.bufferedPageRange();
 
     if (pages.count > 1) {
       for (let i = 0; i < pages.count; i++) {
         this.doc.switchToPage(i);
-        // Must stay inside the document's own bottom margin
-        // (pageHeight - margin) — that exact line is also where PDFKit's
-        // own auto-pagination trigger lives, and text placed past it (as
-        // this used to be, at margin + 6) makes PDFKit silently insert a
-        // fresh blank page to keep "flowing" it, doubling the real page
-        // count with blank pages that carry only a footer.
         this.text(`Page ${i + 1} of ${pages.count}`, this.margin, this.pageHeight - this.margin - 14, {
           size: 7.5,
           color: COLORS.muted,

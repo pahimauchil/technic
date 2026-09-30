@@ -1,121 +1,72 @@
-import Link from "next/link";
-import { Building2 } from "lucide-react";
-
-import { DataTable, type Column } from "@/components/shared/data-table";
-import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { EnterFirmButton } from "./enter-button";
 import { prisma } from "@/lib/prisma";
-import { PERMISSIONS } from "@/lib/rbac";
 import { requirePermission } from "@/lib/session";
-import { CreateFirmDialog } from "@/app/(app)/firms/firm-dialogs";
-import { EnterFirmButton } from "@/app/(app)/firms/enter-firm-button";
+import { isPlatformRole } from "@/lib/rbac";
+import { formatDate } from "@/lib/dates";
 
-export const metadata = { title: "Firms" };
-
-interface FirmRow {
-  id: string;
-  code: string;
-  name: string;
-  city: string | null;
-  status: string;
-  branches: number;
-  users: number;
-  createdAt: Date;
-}
+export const metadata = { title: "Firms — Technic Technologies" };
 
 export default async function FirmsPage() {
-  await requirePermission(PERMISSIONS.FIRM_VIEW);
+  const user = await requirePermission("firms.view");
+  const platformAdmin = isPlatformRole(user.role);
 
-  const firms = await prisma.firm.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { _count: { select: { branches: true, users: true } } },
-  });
-
-  const rows: FirmRow[] = firms.map((firm) => ({
-    id: firm.id,
-    code: firm.code,
-    name: firm.name,
-    city: firm.city,
-    status: firm.status,
-    branches: firm._count.branches,
-    users: firm._count.users,
-    createdAt: firm.createdAt,
-  }));
-
-  const columns: Column<FirmRow>[] = [
-    {
-      key: "name",
-      header: "Firm",
-      cell: (row) => (
-        <div className="min-w-0">
-          <Link href={`/firms/${row.id}`} className="font-medium hover:underline">
-            {row.name}
-          </Link>
-          <p className="text-xs text-muted-foreground font-mono">{row.code}</p>
-        </div>
-      ),
-    },
-    {
-      key: "city",
-      header: "City",
-      cell: (row) => row.city ?? "—",
-      hideOnMobile: true,
-    },
-    {
-      key: "branches",
-      header: "Branches",
-      cell: (row) => row.branches,
-      hideOnMobile: true,
-    },
-    {
-      key: "users",
-      header: "Users",
-      cell: (row) => row.users,
-      hideOnMobile: true,
-    },
-    {
-      key: "status",
-      header: "Status",
-      cell: (row) => <StatusBadge status={row.status} />,
-    },
-    {
-      key: "actions",
-      header: "",
-      cell: (row) => (
-        <div className="flex justify-end gap-2">
-          <EnterFirmButton firmId={row.id} firmName={row.name} disabled={row.status !== "ACTIVE"} />
-          <Button asChild variant="outline" size="sm">
-            <Link href={`/firms/${row.id}`}>Manage</Link>
-          </Button>
-        </div>
-      ),
-      className: "text-right",
-    },
-  ];
+  const firms = platformAdmin
+    ? await prisma.firm.findMany({
+        orderBy: { name: "asc" },
+        include: { _count: { select: { users: true, branches: true, products: true } } },
+      })
+    : await prisma.firm.findMany({
+        where: { id: user.firmId ?? "" },
+        include: { _count: { select: { users: true, branches: true, products: true } } },
+      });
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <PageHeader
         title="Firms"
-        description="Every organization running on this ERP. Each firm's data — orders, customers, staff, finances — is completely isolated from every other firm's."
-        actions={<CreateFirmDialog />}
+        description={
+          platformAdmin
+            ? "Select a firm to operate in — its data, users and access modes"
+            : "Your firm's registration profile"
+        }
       />
 
-      {rows.length === 0 ? (
-        <EmptyState
-          icon={Building2}
-          title="No firms yet"
-          description="Add the first firm to get started."
-        />
-      ) : (
-        <DataTable
-          columns={columns}
-          rows={rows}
-          getRowKey={(row) => row.id}
-        />
-      )}
+      <div className="grid gap-3 md:grid-cols-2">
+        {firms.map((firm) => (
+          <Card key={firm.id}>
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center justify-between gap-2 text-base">
+                <span className="truncate">{firm.displayName || firm.name}</span>
+                <Badge tone={firm.status === "ACTIVE" ? "success" : "danger"}>{firm.status}</Badge>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <p className="text-muted-foreground">{firm.legalName ?? firm.name}</p>
+              {firm.gstin ? <p className="font-mono text-xs">GSTIN {firm.gstin}</p> : <p className="text-xs text-warning">No GSTIN — non-GST billing only</p>}
+              <p className="text-xs text-muted-foreground">
+                {firm.city}, {firm.state} · FY {firm.financialYear}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {firm._count.users} users · {firm._count.branches} branches · {firm._count.products} products
+              </p>
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs text-muted-foreground">Created {formatDate(firm.createdAt)}</span>
+                {platformAdmin ? (
+                  user.activeFirmId === firm.id ? (
+                    <Badge tone="success">Operating here</Badge>
+                  ) : (
+                    <EnterFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} disabled={firm.status !== "ACTIVE"} />
+                  )
+                ) : null}
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

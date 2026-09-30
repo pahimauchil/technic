@@ -3,274 +3,268 @@ import type { UserRole } from "@/generated/prisma/enums";
 /**
  * Permission catalogue. Every server action and route handler authorises against
  * one of these codes — never against a role directly — so that per-user grants
- * and revocations can override the role defaults.
+ * and revocations can override the role defaults. Codes follow the handover
+ * spec: products.view, inventory.adjust, invoice.create, gst_reports.view, ...
  */
 export const PERMISSIONS = {
-  // Dashboard & analytics
+  // Dashboard
   DASHBOARD_VIEW: "dashboard.view",
-  DASHBOARD_VIEW_FINANCIALS: "dashboard.view_financials",
+  DASHBOARD_FINANCIALS: "dashboard.financials",
   DASHBOARD_VIEW_ALL_BRANCHES: "dashboard.view_all_branches",
 
-  // Orders
-  ORDER_VIEW: "orders.view",
-  ORDER_CREATE: "orders.create",
-  ORDER_UPDATE: "orders.update",
-  ORDER_DELETE: "orders.delete",
-  ORDER_CANCEL: "orders.cancel",
-  ORDER_OVERRIDE_PRICE: "orders.override_price",
-  ORDER_APPLY_DISCOUNT: "orders.apply_discount",
-
-  // Garments
-  GARMENT_VIEW: "garments.view",
-  GARMENT_SCAN: "garments.scan",
-  GARMENT_UPDATE: "garments.update",
-  GARMENT_PHOTO_UPLOAD: "garments.photo_upload",
-
-  // Processing
-  PROCESSING_VIEW: "processing.view",
-  PROCESSING_SORTING: "processing.sorting",
-  PROCESSING_WASHING: "processing.washing",
-  PROCESSING_DRYING: "processing.drying",
-  PROCESSING_IRONING: "processing.ironing",
-  PROCESSING_QC: "processing.qc",
-  PROCESSING_PACKING: "processing.packing",
-
-  // Delivery
-  DELIVERY_VIEW: "delivery.view",
-  DELIVERY_MANAGE: "delivery.manage",
-  DELIVERY_ASSIGN_DRIVER: "delivery.assign_driver",
-  DELIVERY_COLLECT_PAYMENT: "delivery.collect_payment",
-
-  // Billing / Payments
-  BILLING_VIEW: "billing.view",
-  BILLING_CREATE_INVOICE: "billing.create_invoice",
-  BILLING_RECORD_PAYMENT: "billing.record_payment",
-  BILLING_REFUND: "billing.refund",
+  // Products & catalogue
+  PRODUCT_VIEW: "products.view",
+  PRODUCT_CREATE: "products.create",
+  PRODUCT_EDIT: "products.edit",
+  PRODUCT_DELETE: "products.delete",
+  PRODUCT_IMPORT: "products.import",
+  CATEGORY_MANAGE: "category.manage",
 
   // Inventory
   INVENTORY_VIEW: "inventory.view",
-  INVENTORY_MANAGE: "inventory.manage",
-  INVENTORY_TRANSFER: "inventory.transfer",
   INVENTORY_ADJUST: "inventory.adjust",
+  INVENTORY_TRANSFER: "inventory.transfer",
+  SERIALS_VIEW: "serials.view",
+  SERIALS_MANAGE: "serials.manage",
 
-  // Garment tracking & mismatch detection
-  TRACKING_VIEW: "tracking.view",
-  TRACKING_RESOLVE: "tracking.resolve",
+  // Sales
+  SALES_VIEW: "sales.view",
+  SALES_CREATE: "sales.create",
+  SALES_EDIT: "sales.edit",
+  SALES_CANCEL: "sales.cancel",
+  QUOTATION_VIEW: "quotation.view",
+  QUOTATION_CREATE: "quotation.create",
+  QUOTATION_CONVERT: "quotation.convert",
+  SALES_RETURN_CREATE: "sales_return.create",
 
-  // Customers
-  CUSTOMER_VIEW: "customers.view",
-  CUSTOMER_MANAGE: "customers.manage",
+  // Invoices
+  INVOICE_VIEW: "invoice.view",
+  INVOICE_CREATE: "invoice.create",
+  INVOICE_CANCEL: "invoice.cancel",
 
   // Purchases
-  PURCHASE_VIEW: "purchases.view",
-  PURCHASE_MANAGE: "purchases.manage",
-  PURCHASE_PAY: "purchases.pay",
+  PURCHASE_VIEW: "purchase.view",
+  PURCHASE_CREATE: "purchase.create",
+  PURCHASE_RECEIVE: "purchase.receive",
+  PURCHASE_RETURN_CREATE: "purchase_return.create",
 
-  // B2B
-  B2B_VIEW: "b2b.view",
-  B2B_MANAGE: "b2b.manage",
-  B2B_BILLING: "b2b.billing",
+  // Partners
+  CUSTOMERS_VIEW: "customers.view",
+  CUSTOMERS_CREATE: "customers.create",
+  CUSTOMERS_EDIT: "customers.edit",
+  SUPPLIERS_VIEW: "suppliers.view",
+  SUPPLIERS_MANAGE: "suppliers.manage",
 
-  // Staff
-  STAFF_VIEW: "staff.view",
-  STAFF_MANAGE: "staff.manage",
-  STAFF_ATTENDANCE: "staff.attendance",
-  STAFF_APPROVE_LEAVE: "staff.approve_leave",
+  // Payments & expenses
+  PAYMENTS_VIEW: "payments.view",
+  PAYMENTS_CREATE: "payments.create",
+  EXPENSES_VIEW: "expenses.view",
+  EXPENSES_CREATE: "expenses.create",
+  EXPENSES_APPROVE: "expenses.approve",
 
-  // Complaints
-  COMPLAINT_VIEW: "complaints.view",
-  COMPLAINT_CREATE: "complaints.create",
-  COMPLAINT_MANAGE: "complaints.manage",
-  COMPLAINT_RESOLVE: "complaints.resolve",
+  // Warranty
+  WARRANTY_VIEW: "warranty.view",
+  WARRANTY_CLAIM: "warranty.claim",
 
   // Reports
-  REPORT_VIEW: "reports.view",
-  REPORT_SALES: "reports.sales",
-  REPORT_OPERATIONS: "reports.operations",
-  REPORT_FINANCE: "reports.finance",
-  REPORT_EXPORT: "reports.export",
+  REPORTS_VIEW: "reports.view",
+  REPORTS_EXPORT: "reports.export",
+  GST_REPORTS_VIEW: "gst_reports.view",
 
-  // Notifications
-  NOTIFICATION_VIEW: "notifications.view",
-  NOTIFICATION_MANAGE: "notifications.manage",
-
-  // Expenses
-  EXPENSE_VIEW: "expenses.view",
-  EXPENSE_MANAGE: "expenses.manage",
-  EXPENSE_APPROVE: "expenses.approve",
-
-  // Settings & administration
-  BRANCH_VIEW: "branches.view",
-  BRANCH_MANAGE: "branches.manage",
-  CATALOGUE_MANAGE: "catalogue.manage",
+  // Administration
+  USERS_VIEW: "users.view",
+  USERS_MANAGE: "users.manage",
+  ROLES_MANAGE: "roles.manage",
+  FIRMS_VIEW: "firms.view",
+  FIRMS_MANAGE: "firms.manage",
+  ACCESS_CODES_MANAGE: "access_codes.manage",
   SETTINGS_MANAGE: "settings.manage",
   AUDIT_VIEW: "audit.view",
-
-  // Finance ERP Engine
-  FINANCE_VIEW: "finance.view",
-  FINANCE_MANAGE: "finance.manage",
-  BANK_MANAGE: "bank.manage",
-  RECONCILE_MANAGE: "reconcile.manage",
-  DATA_IMPORT_EXPORT: "data.import_export",
-
-  // Platform (cross-firm) administration — PLATFORM_ADMIN only, never
-  // granted within a firm's own role set.
-  FIRM_VIEW: "firm.view",
-  FIRM_MANAGE: "firm.manage",
-  PLATFORM_VIEW: "platform.view",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
-export const PERMISSION_MODULES: Record<PermissionCode, string> = Object.values(
-  PERMISSIONS,
-).reduce(
-  (acc, code) => {
-    acc[code] = code.split(".")[0];
-    return acc;
-  },
-  {} as Record<PermissionCode, string>,
-);
+export const ALL_PERMISSIONS = Object.values(PERMISSIONS) as PermissionCode[];
 
 const P = PERMISSIONS;
 
-const ALL_PERMISSIONS = Object.values(PERMISSIONS) as PermissionCode[];
+/** Super Admin — full system access, cross-firm. */
+const PLATFORM_ADMIN_PERMISSIONS: PermissionCode[] = [...ALL_PERMISSIONS, "platform.view" as PermissionCode];
 
-/**
- * Manager: full operational and business access. Everything the shop needs to
- * run day to day — orders, garments, customers, payments, inventory, staff,
- * reports, scanning and printing — but never RBAC or system settings.
- */
+/** Admin — full management of one firm. */
+const ADMIN_PERMISSIONS: PermissionCode[] = ALL_PERMISSIONS.filter(
+  (code) => code !== P.FIRMS_MANAGE,
+);
+
+/** Manager — business operations across the firm. */
 const MANAGER_PERMISSIONS: PermissionCode[] = [
   P.DASHBOARD_VIEW,
-  P.DASHBOARD_VIEW_FINANCIALS,
+  P.DASHBOARD_FINANCIALS,
   P.DASHBOARD_VIEW_ALL_BRANCHES,
-
-  P.ORDER_VIEW,
-  P.ORDER_CREATE,
-  P.ORDER_UPDATE,
-  P.ORDER_DELETE,
-  P.ORDER_CANCEL,
-  P.ORDER_OVERRIDE_PRICE,
-  P.ORDER_APPLY_DISCOUNT,
-
-  P.GARMENT_VIEW,
-  P.GARMENT_SCAN,
-  P.GARMENT_UPDATE,
-  P.GARMENT_PHOTO_UPLOAD,
-
-  P.PROCESSING_VIEW,
-  P.PROCESSING_SORTING,
-  P.PROCESSING_WASHING,
-  P.PROCESSING_DRYING,
-  P.PROCESSING_IRONING,
-  P.PROCESSING_QC,
-  P.PROCESSING_PACKING,
-
-  P.DELIVERY_VIEW,
-  P.DELIVERY_MANAGE,
-  P.DELIVERY_ASSIGN_DRIVER,
-  P.DELIVERY_COLLECT_PAYMENT,
-
-  P.BILLING_VIEW,
-  P.BILLING_CREATE_INVOICE,
-  P.BILLING_RECORD_PAYMENT,
-  P.BILLING_REFUND,
-
+  P.PRODUCT_VIEW,
+  P.PRODUCT_CREATE,
+  P.PRODUCT_EDIT,
+  P.CATEGORY_MANAGE,
   P.INVENTORY_VIEW,
-  P.INVENTORY_MANAGE,
-  P.INVENTORY_TRANSFER,
   P.INVENTORY_ADJUST,
-
-  P.TRACKING_VIEW,
-  P.TRACKING_RESOLVE,
-
-  P.CUSTOMER_VIEW,
-  P.CUSTOMER_MANAGE,
-
+  P.INVENTORY_TRANSFER,
+  P.SERIALS_VIEW,
+  P.SERIALS_MANAGE,
+  P.SALES_VIEW,
+  P.SALES_CREATE,
+  P.SALES_EDIT,
+  P.SALES_CANCEL,
+  P.QUOTATION_VIEW,
+  P.QUOTATION_CREATE,
+  P.QUOTATION_CONVERT,
+  P.SALES_RETURN_CREATE,
+  P.INVOICE_VIEW,
+  P.INVOICE_CREATE,
+  P.INVOICE_CANCEL,
   P.PURCHASE_VIEW,
-  P.PURCHASE_MANAGE,
-  P.PURCHASE_PAY,
-
-  P.B2B_VIEW,
-  P.B2B_MANAGE,
-  P.B2B_BILLING,
-
-  P.STAFF_VIEW,
-  P.STAFF_MANAGE,
-  P.STAFF_ATTENDANCE,
-  P.STAFF_APPROVE_LEAVE,
-
-  P.COMPLAINT_VIEW,
-  P.COMPLAINT_CREATE,
-  P.COMPLAINT_MANAGE,
-  P.COMPLAINT_RESOLVE,
-
-  P.REPORT_VIEW,
-  P.REPORT_SALES,
-  P.REPORT_OPERATIONS,
-  P.REPORT_FINANCE,
-  P.REPORT_EXPORT,
-
-  P.NOTIFICATION_VIEW,
-  P.NOTIFICATION_MANAGE,
-
-  P.EXPENSE_VIEW,
-  P.EXPENSE_MANAGE,
-  P.EXPENSE_APPROVE,
-
-  P.FINANCE_VIEW,
-  P.FINANCE_MANAGE,
-  P.BANK_MANAGE,
-  P.RECONCILE_MANAGE,
-  P.DATA_IMPORT_EXPORT,
-
-  // Deliberately excluded: BRANCH_MANAGE, CATALOGUE_MANAGE, SETTINGS_MANAGE,
-  // AUDIT_VIEW, RBAC_MANAGE — sensitive system/RBAC settings stay with Super Admin.
+  P.PURCHASE_CREATE,
+  P.PURCHASE_RECEIVE,
+  P.PURCHASE_RETURN_CREATE,
+  P.CUSTOMERS_VIEW,
+  P.CUSTOMERS_CREATE,
+  P.CUSTOMERS_EDIT,
+  P.SUPPLIERS_VIEW,
+  P.SUPPLIERS_MANAGE,
+  P.PAYMENTS_VIEW,
+  P.PAYMENTS_CREATE,
+  P.EXPENSES_VIEW,
+  P.EXPENSES_CREATE,
+  P.EXPENSES_APPROVE,
+  P.WARRANTY_VIEW,
+  P.WARRANTY_CLAIM,
+  P.REPORTS_VIEW,
+  P.REPORTS_EXPORT,
+  P.GST_REPORTS_VIEW,
+  P.USERS_VIEW,
+  P.AUDIT_VIEW,
+  P.SETTINGS_MANAGE,
 ];
 
-/**
- * Scanner: the counter/laundry scanning role. Scan a garment, see the owner
- * and order, update the laundry status the scan implies, print the tag, and
- * move on to the next garment. Nothing administrative.
- */
-const SCANNER_PERMISSIONS: PermissionCode[] = [
-  P.GARMENT_VIEW,
-  P.GARMENT_SCAN,
-  P.GARMENT_UPDATE,
-  P.ORDER_VIEW,
-  P.CUSTOMER_VIEW,
-  P.TRACKING_VIEW,
-  P.TRACKING_RESOLVE,
-  P.PROCESSING_VIEW,
-  P.PROCESSING_SORTING,
-  P.PROCESSING_WASHING,
-  P.PROCESSING_DRYING,
-  P.PROCESSING_IRONING,
-  P.PROCESSING_QC,
-  P.PROCESSING_PACKING,
+/** Accountant — invoices, payments, expenses, accounts and reports. */
+const ACCOUNTANT_PERMISSIONS: PermissionCode[] = [
+  P.DASHBOARD_VIEW,
+  P.DASHBOARD_FINANCIALS,
+  P.PRODUCT_VIEW,
+  P.INVENTORY_VIEW,
+  P.SALES_VIEW,
+  P.INVOICE_VIEW,
+  P.INVOICE_CREATE,
+  P.INVOICE_CANCEL,
+  P.PURCHASE_VIEW,
+  P.CUSTOMERS_VIEW,
+  P.CUSTOMERS_CREATE,
+  P.CUSTOMERS_EDIT,
+  P.SUPPLIERS_VIEW,
+  P.PAYMENTS_VIEW,
+  P.PAYMENTS_CREATE,
+  P.EXPENSES_VIEW,
+  P.EXPENSES_CREATE,
+  P.EXPENSES_APPROVE,
+  P.WARRANTY_VIEW,
+  P.REPORTS_VIEW,
+  P.REPORTS_EXPORT,
+  P.GST_REPORTS_VIEW,
+  P.AUDIT_VIEW,
+];
+
+/** Sales Staff — customers, quotations, sales and invoices. */
+const SALES_STAFF_PERMISSIONS: PermissionCode[] = [
+  P.DASHBOARD_VIEW,
+  P.PRODUCT_VIEW,
+  P.INVENTORY_VIEW,
+  P.SERIALS_VIEW,
+  P.SALES_VIEW,
+  P.SALES_CREATE,
+  P.SALES_EDIT,
+  P.QUOTATION_VIEW,
+  P.QUOTATION_CREATE,
+  P.QUOTATION_CONVERT,
+  P.SALES_RETURN_CREATE,
+  P.INVOICE_VIEW,
+  P.INVOICE_CREATE,
+  P.CUSTOMERS_VIEW,
+  P.CUSTOMERS_CREATE,
+  P.CUSTOMERS_EDIT,
+  P.PAYMENTS_VIEW,
+  P.PAYMENTS_CREATE,
+  P.WARRANTY_VIEW,
+];
+
+/** Purchase Staff — suppliers, purchase orders and purchases. */
+const PURCHASE_STAFF_PERMISSIONS: PermissionCode[] = [
+  P.DASHBOARD_VIEW,
+  P.PRODUCT_VIEW,
+  P.INVENTORY_VIEW,
+  P.SERIALS_VIEW,
+  P.PURCHASE_VIEW,
+  P.PURCHASE_CREATE,
+  P.PURCHASE_RECEIVE,
+  P.PURCHASE_RETURN_CREATE,
+  P.SUPPLIERS_VIEW,
+  P.SUPPLIERS_MANAGE,
+  P.PAYMENTS_VIEW,
+];
+
+/** Inventory Manager — products and inventory. */
+const INVENTORY_MANAGER_PERMISSIONS: PermissionCode[] = [
+  P.DASHBOARD_VIEW,
+  P.PRODUCT_VIEW,
+  P.PRODUCT_CREATE,
+  P.PRODUCT_EDIT,
+  P.PRODUCT_IMPORT,
+  P.CATEGORY_MANAGE,
+  P.INVENTORY_VIEW,
+  P.INVENTORY_ADJUST,
+  P.INVENTORY_TRANSFER,
+  P.SERIALS_VIEW,
+  P.SERIALS_MANAGE,
+  P.WARRANTY_VIEW,
+  P.SALES_VIEW,
+  P.PURCHASE_VIEW,
+  P.PURCHASE_RECEIVE,
+  P.REPORTS_VIEW,
+];
+
+/** Viewer — read-only access. */
+const VIEWER_PERMISSIONS: PermissionCode[] = [
+  P.DASHBOARD_VIEW,
+  P.PRODUCT_VIEW,
+  P.INVENTORY_VIEW,
+  P.SERIALS_VIEW,
+  P.SALES_VIEW,
+  P.QUOTATION_VIEW,
+  P.INVOICE_VIEW,
+  P.PURCHASE_VIEW,
+  P.CUSTOMERS_VIEW,
+  P.SUPPLIERS_VIEW,
+  P.PAYMENTS_VIEW,
+  P.EXPENSES_VIEW,
+  P.WARRANTY_VIEW,
+  P.REPORTS_VIEW,
 ];
 
 /**
  * Default role → permission matrix. Seeded into the database as RolePermission
  * rows; per-user overrides live in UserPermission.
- *
- * PLATFORM_ADMIN gets every operational permission too — same as SUPER_ADMIN
- * — because once a PLATFORM_ADMIN "enters" a firm (see session.ts's
- * activeFirmId) they operate inside it exactly like that firm's own admin.
- * Outside of an entered firm, operational pages simply have no firmId to
- * resolve data against and redirect to the Firms module instead; the
- * permission bit being set is harmless on its own.
  */
 export const ROLE_PERMISSIONS: Record<UserRole, PermissionCode[]> = {
-  PLATFORM_ADMIN: [...new Set([...ALL_PERMISSIONS, P.FIRM_VIEW, P.FIRM_MANAGE, P.PLATFORM_VIEW])],
-  SUPER_ADMIN: ALL_PERMISSIONS,
+  PLATFORM_ADMIN: [...new Set(PLATFORM_ADMIN_PERMISSIONS)],
+  ADMIN: [...new Set(ADMIN_PERMISSIONS)],
   MANAGER: [...new Set(MANAGER_PERMISSIONS)],
-  SCANNER: [...new Set(SCANNER_PERMISSIONS)],
+  ACCOUNTANT: [...new Set(ACCOUNTANT_PERMISSIONS)],
+  SALES_STAFF: [...new Set(SALES_STAFF_PERMISSIONS)],
+  PURCHASE_STAFF: [...new Set(PURCHASE_STAFF_PERMISSIONS)],
+  INVENTORY_MANAGER: [...new Set(INVENTORY_MANAGER_PERMISSIONS)],
+  VIEWER: [...new Set(VIEWER_PERMISSIONS)],
 };
 
-/** Roles that may see data across every branch (still bounded to their own firm) rather than just their own branch. */
-export const GLOBAL_ROLES: UserRole[] = ["PLATFORM_ADMIN", "SUPER_ADMIN"];
+/** Roles that may see data across every branch (still bounded to their own firm). */
+export const GLOBAL_ROLES: UserRole[] = ["PLATFORM_ADMIN", "ADMIN"];
 
 export function isGlobalRole(role: UserRole): boolean {
   return GLOBAL_ROLES.includes(role);
@@ -285,106 +279,81 @@ export function defaultPermissionsFor(role: UserRole): PermissionCode[] {
   return ROLE_PERMISSIONS[role] ?? [];
 }
 
-// SUPER_ADMIN keeps its existing enum value (unchanged access codes, unchanged
-// permission checks) but is now relabeled "Firm Admin" in the UI to match its
-// actual scope under multi-tenancy: full control of one firm, never another.
-// PLATFORM_ADMIN is the new cross-firm role and takes the "Super Admin" label
-// the spec uses for it.
 export const ROLE_LABELS: Record<UserRole, string> = {
   PLATFORM_ADMIN: "Super Admin",
-  SUPER_ADMIN: "Firm Admin",
-  MANAGER: "Office Manager",
-  SCANNER: "Scanner",
+  ADMIN: "Admin",
+  MANAGER: "Manager",
+  ACCOUNTANT: "Accountant",
+  SALES_STAFF: "Sales Staff",
+  PURCHASE_STAFF: "Purchase Staff",
+  INVENTORY_MANAGER: "Inventory Manager",
+  VIEWER: "Viewer",
 };
 
 /** Where a user of this role should land right after login. */
 export const ROLE_LANDING_PATH: Record<UserRole, string> = {
   PLATFORM_ADMIN: "/firms",
-  SUPER_ADMIN: "/dashboard",
+  ADMIN: "/dashboard",
   MANAGER: "/dashboard",
-  SCANNER: "/scan",
+  ACCOUNTANT: "/dashboard",
+  SALES_STAFF: "/pos",
+  PURCHASE_STAFF: "/purchases",
+  INVENTORY_MANAGER: "/inventory",
+  VIEWER: "/dashboard",
 };
 
 export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
-  [P.DASHBOARD_VIEW]: "View the operational dashboard",
-  [P.DASHBOARD_VIEW_FINANCIALS]: "See revenue and outstanding figures on the dashboard",
+  [P.DASHBOARD_VIEW]: "View the dashboard",
+  [P.DASHBOARD_FINANCIALS]: "See revenue, outstanding and profit figures",
   [P.DASHBOARD_VIEW_ALL_BRANCHES]: "See data for every branch, not just the assigned one",
-  [P.ORDER_VIEW]: "View orders",
-  [P.ORDER_CREATE]: "Create new orders",
-  [P.ORDER_UPDATE]: "Edit orders and advance their status",
-  [P.ORDER_DELETE]: "Delete orders",
-  [P.ORDER_CANCEL]: "Cancel orders",
-  [P.ORDER_OVERRIDE_PRICE]: "Override calculated prices",
-  [P.ORDER_APPLY_DISCOUNT]: "Apply discounts to orders",
-  [P.GARMENT_VIEW]: "View garments and their history",
-  [P.GARMENT_SCAN]: "Scan garment QR codes and barcodes",
-  [P.GARMENT_UPDATE]: "Edit garment details and laundry status",
-  [P.GARMENT_PHOTO_UPLOAD]: "Upload garment photos",
-  [P.TRACKING_VIEW]: "See garment categories and the mismatch centre",
-  [P.TRACKING_RESOLVE]: "Report missing garments and clear mismatches",
-  [P.CUSTOMER_VIEW]: "View the customer directory and order history",
-  [P.CUSTOMER_MANAGE]: "Add and edit customer records",
-  [P.PROCESSING_VIEW]: "View processing workstations",
-  [P.PROCESSING_SORTING]: "Operate the sorting workstation",
-  [P.PROCESSING_WASHING]: "Operate the washing workstation",
-  [P.PROCESSING_DRYING]: "Operate the drying workstation",
-  [P.PROCESSING_IRONING]: "Operate the ironing workstation",
-  [P.PROCESSING_QC]: "Operate quality control",
-  [P.PROCESSING_PACKING]: "Operate the packing workstation",
-  [P.DELIVERY_VIEW]: "View pickups and deliveries",
-  [P.DELIVERY_MANAGE]: "Create and edit pickups and deliveries",
-  [P.DELIVERY_ASSIGN_DRIVER]: "Assign drivers to jobs",
-  [P.DELIVERY_COLLECT_PAYMENT]: "Collect payment on delivery",
-  [P.BILLING_VIEW]: "View invoices and payments",
-  [P.BILLING_CREATE_INVOICE]: "Generate invoices",
-  [P.BILLING_RECORD_PAYMENT]: "Record payments",
-  [P.BILLING_REFUND]: "Issue refunds",
-  [P.INVENTORY_VIEW]: "View inventory levels",
-  [P.INVENTORY_MANAGE]: "Manage inventory items and stock movements",
+  [P.PRODUCT_VIEW]: "View products and the catalogue",
+  [P.PRODUCT_CREATE]: "Create products",
+  [P.PRODUCT_EDIT]: "Edit products, variants and prices",
+  [P.PRODUCT_DELETE]: "Deactivate or delete products",
+  [P.PRODUCT_IMPORT]: "Bulk import products from CSV/Excel",
+  [P.CATEGORY_MANAGE]: "Manage categories and brands",
+  [P.INVENTORY_VIEW]: "View stock levels and transactions",
+  [P.INVENTORY_ADJUST]: "Perform stock adjustments",
   [P.INVENTORY_TRANSFER]: "Transfer stock between branches",
-  [P.INVENTORY_ADJUST]: "Adjust stock quantities",
-  [P.PURCHASE_VIEW]: "View suppliers and purchase orders",
-  [P.PURCHASE_MANAGE]: "Manage suppliers, purchase orders and receipts",
-  [P.PURCHASE_PAY]: "Record supplier payments",
-  [P.B2B_VIEW]: "View corporate accounts",
-  [P.B2B_MANAGE]: "Manage corporate accounts, contracts and rate cards",
-  [P.B2B_BILLING]: "Generate corporate statements and invoices",
-  [P.STAFF_VIEW]: "View staff records",
-  [P.STAFF_MANAGE]: "Create and edit staff records",
-  [P.STAFF_ATTENDANCE]: "Record attendance",
-  [P.STAFF_APPROVE_LEAVE]: "Approve or reject leave requests",
-  [P.COMPLAINT_VIEW]: "View complaints",
-  [P.COMPLAINT_CREATE]: "Raise complaints",
-  [P.COMPLAINT_MANAGE]: "Investigate and assign complaints",
-  [P.COMPLAINT_RESOLVE]: "Resolve complaints and award compensation",
-  [P.REPORT_VIEW]: "Open the reports module",
-  [P.REPORT_SALES]: "View sales reports",
-  [P.REPORT_OPERATIONS]: "View operations reports",
-  [P.REPORT_FINANCE]: "View finance reports",
-  [P.REPORT_EXPORT]: "Export report data",
-  [P.NOTIFICATION_VIEW]: "View notification logs",
-  [P.NOTIFICATION_MANAGE]: "Manage notification templates and resend messages",
-  [P.EXPENSE_VIEW]: "View expenses",
-  [P.EXPENSE_MANAGE]: "Record expenses",
-  [P.EXPENSE_APPROVE]: "Approve expenses",
-  [P.BRANCH_VIEW]: "View branches",
-  [P.BRANCH_MANAGE]: "Create and edit branches",
-  [P.CATALOGUE_MANAGE]: "Manage services, garment types and rates",
-  [P.SETTINGS_MANAGE]: "Change system settings",
-  [P.AUDIT_VIEW]: "View audit logs",
-  [P.FIRM_VIEW]: "View the Firms directory",
-  [P.FIRM_MANAGE]: "Create, edit, activate and deactivate firms",
-  [P.PLATFORM_VIEW]: "View platform-wide statistics across all firms",
-};
-
-/** Maps a processing stage to the permission required to operate it. */
-export const STAGE_PERMISSION: Record<string, PermissionCode> = {
-  SORTING: P.PROCESSING_SORTING,
-  WASHING: P.PROCESSING_WASHING,
-  DRYING: P.PROCESSING_DRYING,
-  IRONING: P.PROCESSING_IRONING,
-  QUALITY_CHECK: P.PROCESSING_QC,
-  PACKING: P.PROCESSING_PACKING,
-  RECEIVING: P.ORDER_CREATE,
-  DISPATCH: P.DELIVERY_MANAGE,
+  [P.SERIALS_VIEW]: "View serial numbers and IMEIs",
+  [P.SERIALS_MANAGE]: "Manage serial units and their status",
+  [P.SALES_VIEW]: "View sales orders and quotations",
+  [P.SALES_CREATE]: "Create sales orders",
+  [P.SALES_EDIT]: "Edit sales orders",
+  [P.SALES_CANCEL]: "Cancel sales orders",
+  [P.QUOTATION_VIEW]: "View quotations",
+  [P.QUOTATION_CREATE]: "Create quotations",
+  [P.QUOTATION_CONVERT]: "Convert quotations to invoices",
+  [P.SALES_RETURN_CREATE]: "Create sales returns",
+  [P.INVOICE_VIEW]: "View invoices",
+  [P.INVOICE_CREATE]: "Create invoices",
+  [P.INVOICE_CANCEL]: "Cancel invoices",
+  [P.PURCHASE_VIEW]: "View purchase orders and supplier bills",
+  [P.PURCHASE_CREATE]: "Create purchase orders",
+  [P.PURCHASE_RECEIVE]: "Receive goods and create purchase invoices",
+  [P.PURCHASE_RETURN_CREATE]: "Create purchase returns",
+  [P.CUSTOMERS_VIEW]: "View customers",
+  [P.CUSTOMERS_CREATE]: "Create customers",
+  [P.CUSTOMERS_EDIT]: "Edit customers",
+  [P.SUPPLIERS_VIEW]: "View suppliers",
+  [P.SUPPLIERS_MANAGE]: "Create and edit suppliers",
+  [P.PAYMENTS_VIEW]: "View payments and outstanding balances",
+  [P.PAYMENTS_CREATE]: "Record payments",
+  [P.EXPENSES_VIEW]: "View expenses",
+  [P.EXPENSES_CREATE]: "Record expenses",
+  [P.EXPENSES_APPROVE]: "Approve expenses",
+  [P.WARRANTY_VIEW]: "View warranties and lookup",
+  [P.WARRANTY_CLAIM]: "Register warranty claims",
+  [P.REPORTS_VIEW]: "Open the reports module",
+  [P.REPORTS_EXPORT]: "Export reports and data as CSV",
+  [P.GST_REPORTS_VIEW]: "View GST reports (GST mode only)",
+  [P.USERS_VIEW]: "View user accounts",
+  [P.USERS_MANAGE]: "Create and manage users",
+  [P.ROLES_MANAGE]: "Change role permissions and user overrides",
+  [P.FIRMS_VIEW]: "View firms",
+  [P.FIRMS_MANAGE]: "Create, edit and deactivate firms",
+  [P.ACCESS_CODES_MANAGE]: "Manage GST / non-GST access codes",
+  [P.SETTINGS_MANAGE]: "Change firm settings and document numbering",
+  [P.AUDIT_VIEW]: "View the audit log",
+  "platform.view": "View platform-wide statistics across all firms",
 };

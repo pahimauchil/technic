@@ -1,31 +1,23 @@
 import {
-  Activity,
-  ArrowDownLeft,
-  ArrowUpRight,
+  ArrowLeftRight,
+  BadgePercent,
   Boxes,
-  Building2,
   ClipboardList,
-  Cpu,
-  DollarSign,
-  Download,
   FileBarChart,
-  FileSpreadsheet,
   FileText,
-  Grid,
-  Layers,
   LayoutDashboard,
-  MessageSquare,
+  MonitorSmartphone,
+  Package,
   Receipt,
-  Scale,
-  ScanLine,
   Settings,
-  Shapes,
-  Shirt,
-  ShoppingBag,
-  Tag,
+  ShieldCheck,
+  ShoppingCart,
   Truck,
+  Undo2,
+  User,
   Users,
   Wallet,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 
@@ -47,12 +39,12 @@ export interface NavSection {
 }
 
 /**
- * Real-world Complete Laundry ERP Navigation Structure.
- * Structured into Operations, Finance, Inventory, and Management.
+ * Technic Technologies ERP navigation, following the handover's sidebar order:
+ * Dashboard → Sales → Purchases → Inventory → Partners → Money → Warranty →
+ * Reports → Administration.
  */
 export const NAV_SECTIONS: NavSection[] = [
   {
-    label: "OPERATIONS",
     items: [
       {
         label: "Dashboard",
@@ -61,149 +53,75 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: [PERMISSIONS.DASHBOARD_VIEW],
         exact: true,
       },
+    ],
+  },
+  {
+    label: "SALES",
+    items: [
       {
-        label: "Orders",
-        href: "/orders",
-        icon: ClipboardList,
-        permissions: [PERMISSIONS.ORDER_VIEW],
+        label: "Point of Sale",
+        href: "/pos",
+        icon: MonitorSmartphone,
+        permissions: [PERMISSIONS.SALES_CREATE, PERMISSIONS.INVOICE_CREATE],
       },
       {
-        label: "Garments",
-        href: "/garments",
-        icon: Shirt,
-        permissions: [PERMISSIONS.GARMENT_VIEW],
+        label: "Invoices",
+        href: "/invoices",
+        icon: Receipt,
+        permissions: [PERMISSIONS.INVOICE_VIEW],
       },
       {
-        label: "Categories",
-        href: "/categories",
-        icon: Shapes,
-        permissions: [PERMISSIONS.GARMENT_VIEW, PERMISSIONS.CATALOGUE_MANAGE],
-      },
-      {
-        label: "Customers",
-        href: "/customers",
-        icon: Users,
-        permissions: [PERMISSIONS.CUSTOMER_VIEW],
-      },
-      {
-        label: "Services & Pricing",
-        href: "/services",
-        icon: Tag,
-        permissions: [PERMISSIONS.CATALOGUE_MANAGE, PERMISSIONS.ORDER_VIEW],
-      },
-      {
-        label: "Processing",
-        href: "/processing",
-        icon: Cpu,
-        permissions: [PERMISSIONS.PROCESSING_VIEW],
-      },
-      {
-        label: "Scan Station",
-        href: "/scan",
-        icon: ScanLine,
-        permissions: [PERMISSIONS.GARMENT_SCAN],
-      },
-      {
-        label: "Batch Scan",
-        href: "/scan?mode=batch",
-        icon: Layers,
-        permissions: [PERMISSIONS.GARMENT_SCAN],
-      },
-      {
-        label: "Delivery",
-        href: "/delivery",
-        icon: Truck,
-        permissions: [PERMISSIONS.DELIVERY_VIEW],
-      },
-      {
-        label: "Delivery Challans",
-        href: "/delivery-challans",
+        label: "Quotations",
+        href: "/quotations",
         icon: FileText,
-        permissions: [PERMISSIONS.DELIVERY_VIEW],
+        permissions: [PERMISSIONS.QUOTATION_VIEW],
+      },
+      {
+        label: "Sales Orders",
+        href: "/sales-orders",
+        icon: ClipboardList,
+        permissions: [PERMISSIONS.SALES_VIEW],
+      },
+      {
+        label: "Sales Returns",
+        href: "/sales-returns",
+        icon: Undo2,
+        permissions: [PERMISSIONS.SALES_VIEW],
+      },
+      {
+        label: "Payments",
+        href: "/payments",
+        icon: Wallet,
+        permissions: [PERMISSIONS.PAYMENTS_VIEW],
       },
     ],
   },
   {
-    label: "FINANCE",
+    label: "PURCHASES",
     items: [
       {
-        label: "Financial Overview",
-        href: "/finance",
-        icon: DollarSign,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-        exact: true,
+        label: "Purchase Orders",
+        href: "/purchases",
+        icon: ShoppingCart,
+        permissions: [PERMISSIONS.PURCHASE_VIEW],
       },
       {
-        label: "Business Ledger",
-        href: "/finance/ledger",
-        icon: FileSpreadsheet,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
+        label: "Purchase Bills",
+        href: "/purchases/bills",
+        icon: FileText,
+        permissions: [PERMISSIONS.PURCHASE_VIEW],
       },
       {
-        label: "Incoming Money",
-        href: "/finance/incoming",
-        icon: ArrowDownLeft,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
+        label: "Purchase Returns",
+        href: "/purchases/returns",
+        icon: Undo2,
+        permissions: [PERMISSIONS.PURCHASE_VIEW],
       },
       {
-        label: "Outgoing Money",
-        href: "/finance/outgoing",
-        icon: ArrowUpRight,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-      },
-      {
-        label: "Cash in Hand",
-        href: "/finance/cash",
-        icon: Wallet,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-      },
-      {
-        label: "Bank Accounts",
-        href: "/finance/bank-accounts",
-        icon: Building2,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-      },
-      {
-        label: "Customer Receivables",
-        href: "/finance/receivables",
-        icon: ArrowDownLeft,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-      },
-      {
-        label: "Supplier Payables",
-        href: "/finance/payables",
-        icon: ArrowUpRight,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-      },
-      {
-        label: "Payments & Invoices",
-        href: "/billing",
-        icon: Receipt,
-        permissions: [PERMISSIONS.BILLING_VIEW],
-      },
-      {
-        label: "Expenses",
-        href: "/expenses",
-        icon: Wallet,
-        permissions: [PERMISSIONS.EXPENSE_VIEW],
-      },
-      {
-        label: "Sales Register",
-        href: "/finance/sales",
-        icon: ShoppingBag,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
-      },
-      {
-        label: "Financial Reports & P&L",
-        href: "/finance/reports",
-        icon: FileBarChart,
-        permissions: [PERMISSIONS.REPORT_VIEW],
-      },
-      {
-        label: "Reconciliation",
-        href: "/finance/reconciliation",
-        icon: Scale,
-        permissions: [PERMISSIONS.FINANCE_VIEW],
+        label: "Suppliers",
+        href: "/suppliers",
+        icon: Truck,
+        permissions: [PERMISSIONS.SUPPLIERS_VIEW],
       },
     ],
   },
@@ -211,76 +129,151 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "INVENTORY",
     items: [
       {
-        label: "Consumables Inventory",
+        label: "Products",
+        href: "/products",
+        icon: Package,
+        permissions: [PERMISSIONS.PRODUCT_VIEW],
+      },
+      {
+        label: "Stock",
         href: "/inventory",
         icon: Boxes,
         permissions: [PERMISSIONS.INVENTORY_VIEW],
       },
       {
-        label: "Suppliers",
-        href: "/purchases/suppliers",
-        icon: Users,
-        permissions: [PERMISSIONS.PURCHASE_VIEW],
+        label: "Serial Numbers",
+        href: "/serials",
+        icon: BadgePercent,
+        permissions: [PERMISSIONS.SERIALS_VIEW],
       },
       {
-        label: "Purchase Orders",
-        href: "/purchases",
-        icon: ClipboardList,
-        permissions: [PERMISSIONS.PURCHASE_VIEW],
+        label: "Stock Adjustments",
+        href: "/inventory/adjustments",
+        icon: Wrench,
+        permissions: [PERMISSIONS.INVENTORY_ADJUST],
+      },
+      {
+        label: "Stock Transfers",
+        href: "/inventory/transfers",
+        icon: ArrowLeftRight,
+        permissions: [PERMISSIONS.INVENTORY_TRANSFER],
       },
     ],
   },
   {
-    label: "MANAGEMENT",
+    label: "PARTNERS",
     items: [
       {
-        label: "Staff Directory",
-        href: "/staff",
+        label: "Customers",
+        href: "/customers",
         icon: Users,
-        permissions: [PERMISSIONS.STAFF_VIEW],
+        permissions: [PERMISSIONS.CUSTOMERS_VIEW],
+      },
+    ],
+  },
+  {
+    label: "BUSINESS",
+    items: [
+      {
+        label: "Expenses",
+        href: "/expenses",
+        icon: Wallet,
+        permissions: [PERMISSIONS.EXPENSES_VIEW],
       },
       {
-        label: "Operational Reports",
+        label: "Warranty",
+        href: "/warranty",
+        icon: ShieldCheck,
+        permissions: [PERMISSIONS.WARRANTY_VIEW],
+      },
+      {
+        label: "Reports",
         href: "/reports",
         icon: FileBarChart,
-        permissions: [PERMISSIONS.REPORT_VIEW],
+        permissions: [PERMISSIONS.REPORTS_VIEW],
+      },
+    ],
+  },
+  {
+    label: "ADMINISTRATION",
+    items: [
+      {
+        label: "Users",
+        href: "/users",
+        icon: User,
+        permissions: [PERMISSIONS.USERS_VIEW],
       },
       {
-        label: "System Activity Log",
-        href: "/activity-log",
-        icon: Activity,
-        permissions: [PERMISSIONS.AUDIT_VIEW],
+        label: "Roles & Permissions",
+        href: "/users/roles",
+        icon: ShieldCheck,
+        permissions: [PERMISSIONS.ROLES_MANAGE],
       },
       {
-        label: "Import / Export",
-        href: "/management/import-export",
-        icon: Download,
-        permissions: [PERMISSIONS.DATA_IMPORT_EXPORT],
+        label: "Firms",
+        href: "/firms",
+        icon: Settings,
+        permissions: [PERMISSIONS.FIRMS_VIEW],
       },
       {
-        label: "WhatsApp Gateway",
-        href: "/settings/whatsapp",
-        icon: MessageSquare,
-        permissions: [PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.NOTIFICATION_VIEW],
+        label: "Access Codes",
+        href: "/access-codes",
+        icon: BadgePercent,
+        permissions: [PERMISSIONS.ACCESS_CODES_MANAGE],
       },
       {
         label: "Settings",
         href: "/settings",
         icon: Settings,
-        permissions: [
-          PERMISSIONS.SETTINGS_MANAGE,
-          PERMISSIONS.BRANCH_VIEW,
-          PERMISSIONS.CATALOGUE_MANAGE,
-          PERMISSIONS.NOTIFICATION_VIEW,
-        ],
+        permissions: [PERMISSIONS.SETTINGS_MANAGE],
+      },
+      {
+        label: "Audit Logs",
+        href: "/audit",
+        icon: FileBarChart,
+        permissions: [PERMISSIONS.AUDIT_VIEW],
       },
     ],
   },
 ];
 
+export const MOBILE_BOTTOM_NAV: NavItem[] = [
+  {
+    label: "Dashboard",
+    href: "/dashboard",
+    icon: LayoutDashboard,
+    permissions: [PERMISSIONS.DASHBOARD_VIEW],
+    exact: true,
+  },
+  {
+    label: "POS",
+    href: "/pos",
+    icon: MonitorSmartphone,
+    permissions: [PERMISSIONS.SALES_CREATE, PERMISSIONS.INVOICE_CREATE],
+  },
+  {
+    label: "Products",
+    href: "/products",
+    icon: Package,
+    permissions: [PERMISSIONS.PRODUCT_VIEW],
+  },
+  {
+    label: "Invoices",
+    href: "/invoices",
+    icon: Receipt,
+    permissions: [PERMISSIONS.INVOICE_VIEW],
+  },
+  {
+    label: "More",
+    href: "/menu",
+    icon: Settings,
+    permissions: [],
+  },
+];
+
 export function visibleSections(permissions: PermissionCode[]): NavSection[] {
   const has = (item: NavItem) =>
-    item.permissions.some((code) => permissions.includes(code));
+    item.permissions.length === 0 || item.permissions.some((code) => permissions.includes(code));
 
   return NAV_SECTIONS.map((section) => ({
     ...section,

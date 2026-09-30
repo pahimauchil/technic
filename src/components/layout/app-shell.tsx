@@ -6,9 +6,9 @@ import { useState, type ReactNode } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { BottomNav } from "@/components/layout/bottom-nav";
-import type { Alert } from "@/lib/services/alerts";
 import type { PermissionCode } from "@/lib/rbac";
-import type { UserRole } from "@/generated/prisma/enums";
+import { isPlatformRole } from "@/lib/rbac";
+import type { TaxMode, UserRole } from "@/generated/prisma/enums";
 
 interface AppShellProps {
   user: {
@@ -16,16 +16,18 @@ interface AppShellProps {
     email: string;
     role: UserRole;
     branchName: string | null;
+    firmName: string | null;
     permissions: PermissionCode[];
+    accessMode: TaxMode;
   };
-  alerts: { alerts: Alert[]; total: number };
   children: ReactNode;
 }
 
-export function AppShell({ user, alerts, children }: AppShellProps) {
+export function AppShell({ user, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const canScan = user.permissions.includes("garments.scan" as PermissionCode);
+  const canSwitchMode =
+    isPlatformRole(user.role) || user.permissions.includes("access_codes.manage" as PermissionCode);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -42,8 +44,9 @@ export function AppShell({ user, alerts, children }: AppShellProps) {
             email={user.email}
             role={user.role}
             branchName={user.branchName}
-            alerts={alerts}
-            canScan={canScan}
+            firmName={user.firmName}
+            accessMode={user.accessMode}
+            canSwitchMode={canSwitchMode}
             onOpenSidebar={() => setSidebarOpen(true)}
           />
         </div>
@@ -52,10 +55,7 @@ export function AppShell({ user, alerts, children }: AppShellProps) {
             {children}
           </div>
         </main>
-        <BottomNav
-          onOpenSidebar={() => setSidebarOpen(true)}
-          canScan={canScan}
-        />
+        <BottomNav onOpenSidebar={() => setSidebarOpen(true)} />
       </div>
     </div>
   );

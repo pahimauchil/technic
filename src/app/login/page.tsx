@@ -1,38 +1,38 @@
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LoginForm } from "@/app/login/login-form";
-import { AurcleanLogo } from "@/components/shared/aurclean-logo";
+import { TechnicLogo } from "@/components/shared/technic-logo";
 
-export const metadata = { title: "Welcome to AURCLEAN — Access Code" };
+export const metadata = { title: "Sign in — Technic Technologies ERP" };
 
 export default function LoginPage() {
   return (
-    <div className="relative flex min-h-dvh items-center justify-center bg-gradient-to-br from-[#041d16] via-[#0a3b2c] to-[#06261c] px-4 py-12 overflow-hidden">
-      {/* Subtle branded background glow elements */}
-      <div className="absolute -top-40 -left-40 size-96 rounded-full bg-emerald-500/10 blur-3xl pointer-events-none" />
-      <div className="absolute -bottom-40 -right-40 size-96 rounded-full bg-emerald-400/10 blur-3xl pointer-events-none" />
+    <div className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-gradient-to-br from-[#0b2417] via-[#123524] to-[#0b2417] px-4 py-12">
+      {/* Subtle branded background glows */}
+      <div className="pointer-events-none absolute -left-40 -top-40 size-96 rounded-full bg-red-600/10 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-40 -right-40 size-96 rounded-full bg-green-500/10 blur-3xl" />
 
       <div className="relative z-10 w-full max-w-md space-y-8">
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="relative flex items-center justify-center p-3 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-md shadow-[0_0_40px_rgba(16,185,129,0.2)]">
-            <AurcleanLogo size="2xl" variant="icon" />
+          <div className="flex items-center justify-center rounded-2xl bg-white p-5 shadow-[0_0_60px_rgba(18,53,36,0.55)]">
+            <TechnicLogo className="h-12" />
           </div>
-          <div className="space-y-1 mt-1">
-            <h1 className="text-3xl font-black tracking-tight text-white flex items-center justify-center gap-1">
-              <span>AUR</span><span className="text-emerald-400">CLEAN</span>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Technic Technologies
             </h1>
-            <p className="text-xs font-bold text-emerald-300/90 uppercase tracking-[0.2em]">
-              Laundry Operations & ERP System
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">
+              Electronics ERP
             </p>
           </div>
         </div>
 
-        <Suspense fallback={<Skeleton className="h-48 w-full rounded-2xl bg-emerald-950/40" />}>
+        <Suspense fallback={<Skeleton className="h-48 w-full rounded-2xl bg-white/10" />}>
           <LoginForm />
         </Suspense>
 
-        <p className="text-center text-xs text-emerald-300/60">
-          Lost your code? Ask a Super Admin to look it up in Staff.
+        <p className="text-center text-xs text-white/50">
+          Lost your code? Ask a Super Admin to look it up in Users.
         </p>
       </div>
     </div>

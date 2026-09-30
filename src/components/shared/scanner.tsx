@@ -27,7 +27,7 @@ interface ScannerProps {
 }
 
 /**
- * Dual-mode garment scanner.
+ * Dual-mode barcode scanner (keyboard + camera).
  *
  * Keyboard mode is the default because hardware barcode guns behave like
  * keyboards and are what most counters use; camera mode covers phones and
@@ -35,7 +35,7 @@ interface ScannerProps {
  */
 export function Scanner({
   onScan,
-  placeholder = "Scan or type a garment code (e.g. G1001)",
+  placeholder = "Scan or type a barcode / serial (e.g. MOB-SGS24-256)",
   autoFocus = true,
   className,
   disabled,
@@ -186,7 +186,7 @@ export function Scanner({
           autoComplete="off"
           spellCheck={false}
           className="h-12 pr-10 font-mono text-base uppercase"
-          aria-label="Garment code"
+          aria-label="Barcode or serial"
         />
         {busy ? (
           <Loader2 className="absolute right-3 top-1/2 size-4 -translate-y-1/2 animate-spin text-muted-foreground" />

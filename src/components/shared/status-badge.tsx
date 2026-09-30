@@ -1,6 +1,6 @@
 import { Badge } from "@/components/ui/badge";
 import { cn, humanize } from "@/lib/utils";
-import { toneFor, type BadgeTone } from "@/lib/workflow";
+import { toBadgeTone, STATUS_TONES, type BadgeTone } from "@/lib/workflow";
 
 interface StatusBadgeProps {
   status: string | null | undefined;
@@ -21,7 +21,7 @@ const DOT_COLORS: Record<BadgeTone, string> = {
 
 /** Consistent status pill used across every module. */
 export function StatusBadge({ status, label, tone, className, dot }: StatusBadgeProps) {
-  const resolvedTone = tone ?? toneFor(status);
+  const resolvedTone = tone ?? toBadgeTone(STATUS_TONES[status ?? ""]);
   return (
     <Badge data-slot="status-badge" tone={resolvedTone} className={cn("gap-1.5", className)}>
       {dot ? (

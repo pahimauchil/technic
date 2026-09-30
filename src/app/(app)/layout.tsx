@@ -1,12 +1,10 @@
 import type { ReactNode } from "react";
 
 import { AppShell } from "@/components/layout/app-shell";
-import { getAlerts } from "@/lib/services/alerts";
 import { requireUser } from "@/lib/session";
 
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await requireUser();
-  const alerts = await getAlerts(user);
 
   return (
     <AppShell
@@ -15,9 +13,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         email: user.email,
         role: user.role,
         branchName: user.branchName,
+        firmName: user.activeFirmName ?? user.firmName,
         permissions: user.permissions,
+        accessMode: user.accessMode,
       }}
-      alerts={{ alerts: alerts.alerts, total: alerts.total }}
     >
       {children}
     </AppShell>

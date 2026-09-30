@@ -7,17 +7,17 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "AURCLEAN — Laundry Management ERP",
-    template: "%s · AURCLEAN ERP",
+    default: "Technic Technologies — Electronics ERP",
+    template: "%s · Technic Technologies ERP",
   },
   description:
-    "AURCLEAN Real-Time Laundry Operating System & Business Management ERP.",
+    "Technic Technologies Electronics ERP — products, inventory, serial & IMEI tracking, GST and non-GST billing, purchases, payments and reports.",
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  themeColor: "#0a3b2c",
+  themeColor: "#123524",
 };
 
 export default function RootLayout({

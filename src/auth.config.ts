@@ -2,7 +2,7 @@ import type { NextAuthConfig } from "next-auth";
 
 /**
  * Edge-safe slice of the auth configuration. It deliberately contains no
- * database or Node-only imports so that it can power the middleware.
+ * database or Node-only imports so that it can power the proxy (middleware).
  */
 export const authConfig = {
   pages: {

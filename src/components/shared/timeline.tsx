@@ -19,7 +19,7 @@ const DOT_TONES = {
   info: "bg-info",
 } as const;
 
-/** Vertical activity feed used for garment history, order history and audit. */
+/** Vertical activity feed used for serial history, document history and audit. */
 export function Timeline({ entries }: { entries: TimelineEntry[] }) {
   if (entries.length === 0) {
     return (

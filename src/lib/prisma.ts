@@ -15,6 +15,10 @@ const createPrismaClient = (): PrismaClient => {
 
   return new PrismaClient({
     adapter: new PrismaPg({ connectionString }),
+    // Remote Postgres (e.g. Neon over the internet) can be slow enough that
+    // multi-write transactions like POS checkout exceed the 5s default and
+    // roll back silently from the user's point of view. Give headroom.
+    transactionOptions: { maxWait: 5_000, timeout: 30_000 },
     log:
       process.env.NODE_ENV === "development"
         ? ["warn", "error"]
@@ -32,7 +36,7 @@ function getPrismaClient(): PrismaClient {
   }
   // Cache on globalThis in every environment, not just development. This
   // module's export is a Proxy whose get() trap calls getPrismaClient() on
-  // every single property access (prisma.order, prisma.garment, ...) — so
+  // every single property access (prisma.invoice, prisma.product, ...) — so
   // without this cache, production requests were constructing a brand-new
   // PrismaClient (and a brand-new pg connection pool) on every property
   // access and never closing it, exhausting Postgres's max_connections

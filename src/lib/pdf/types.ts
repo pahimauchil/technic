@@ -1,20 +1,19 @@
 export type DocumentType =
   | "invoice"
   | "INVOICE"
-  | "challan"
-  | "delivery_challan"
-  | "DELIVERY_CHALLAN"
+  | "TAX_INVOICE"
+  | "NON_GST_BILL"
+  | "quotation"
+  | "QUOTATION"
+  | "purchase_order"
+  | "PURCHASE_ORDER"
+  | "purchase_invoice"
+  | "PURCHASE_INVOICE"
   | "payment_receipt"
   | "PAYMENT_RECEIPT"
-  | "delivery_receipt"
-  | "DELIVERY_RECEIPT"
-  | "order_summary"
-  | "ORDER_SUMMARY"
-  | "statement"
-  | "STATEMENT"
+  | "supplier_payment"
   | "expense"
-  | "expense_receipt"
-  | "EXPENSE_RECEIPT";
+  | "EXPENSE";
 
 export interface CompanyProfile {
   name: string;
@@ -23,10 +22,12 @@ export interface CompanyProfile {
   email: string;
   website: string;
   gstin: string;
+  pan: string;
   logoUrl?: string;
   footerText?: string;
   termsConditions?: string;
   invoicePrefix?: string;
-  challanPrefix?: string;
-  receiptPrefix?: string;
+  quotationPrefix?: string;
+  purchasePrefix?: string;
+  bankDetails?: string;
 }

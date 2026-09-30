@@ -1,5 +1,5 @@
 import type { DefaultSession } from "next-auth";
-import type { UserRole } from "@/generated/prisma/enums";
+import type { TaxMode, UserRole } from "@/generated/prisma/enums";
 import type { PermissionCode } from "@/lib/rbac";
 
 declare module "next-auth" {
@@ -16,6 +16,7 @@ declare module "next-auth" {
       firmName: string | null;
       activeFirmId: string | null;
       activeFirmName: string | null;
+      accessMode: TaxMode;
     } & DefaultSession["user"];
   }
 
@@ -30,6 +31,7 @@ declare module "next-auth" {
     firmName?: string | null;
     activeFirmId: string | null;
     activeFirmName?: string | null;
+    accessMode?: TaxMode;
   }
 }
 
@@ -46,5 +48,6 @@ declare module "next-auth/jwt" {
     firmName: string | null;
     activeFirmId: string | null;
     activeFirmName: string | null;
+    accessMode: TaxMode;
   }
 }

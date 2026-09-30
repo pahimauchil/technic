@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { formatCurrency, amountInWords, num } from "@/lib/money";
-import { formatDate, formatTime } from "@/lib/dates";
+import { formatDate } from "@/lib/dates";
 import {
   getCompanyProfile,
   PDFDocumentBuilder,
@@ -12,16 +12,24 @@ import {
   type SummaryLine,
 } from "./pdf-builder";
 
-const UNIT_LABEL: Record<string, string> = {
-  PER_PIECE: "Pcs",
-  PER_KG: "Kg",
-  FLAT: "-",
-};
+/**
+ * Technic Technologies document templates. One generator per business
+ * document, all assembled from the shared PDFDocumentBuilder blocks:
+ *  - Tax Invoice (GST) / Non-GST Bill, keyed on invoice.kind
+ *  - Quotation
+ *  - Purchase Order
+ *  - Purchase Invoice (supplier bill)
+ *  - Payment Receipt (customer receipt)
+ *  - Expense Voucher
+ */
 
-const ORDER_TYPE_LABEL: Record<string, string> = {
-  WALK_IN: "Walk-in",
-  PICKUP: "Pickup",
-  DELIVERY: "Delivery",
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  CASH: "Cash",
+  UPI: "UPI",
+  CARD: "Card",
+  BANK_TRANSFER: "Bank Transfer",
+  CHEQUE: "Cheque",
+  OTHER: "Other",
 };
 
 function branchProfile(branch: {
@@ -44,253 +52,497 @@ function branchProfile(branch: {
   };
 }
 
+function serialSuffix(serialNumbers: string | null): string {
+  if (!serialNumbers) return "";
+  const serials = serialNumbers.split("\n").filter(Boolean);
+  if (serials.length === 0) return "";
+  return `\nSN: ${serials.join(", ")}`;
+}
+
+type Numericish = number | string | { toNumber: () => number };
+
+interface LineLike {
+  description: string;
+  hsnCode?: string | null;
+  serialNumbers?: string | null;
+  quantity: number;
+  unitPrice: Numericish;
+  discountPercent?: Numericish | null;
+  gstRate?: Numericish | null;
+  taxableValue?: Numericish | null;
+  cgstAmount?: Numericish | null;
+  sgstAmount?: Numericish | null;
+  igstAmount?: Numericish | null;
+  lineTotal: Numericish;
+}
+
+interface TaxTotals {
+  taxableAmount: number;
+  cgstAmount: number;
+  sgstAmount: number;
+  igstAmount: number;
+}
+
 /**
- * 1. Bill of Supply (Tax Invoice) PDF Generator
+ * The line-items table. GST documents expose taxable value + CGST/SGST/IGST
+ * columns per the tax-invoice format; NON-GST bills omit the tax columns.
  */
+function invoiceTableRows(lines: LineLike[], withTaxColumns: boolean) {
+  let totalQty = 0;
+  const rows: PDFTableRow[] = lines.map((line, idx) => {
+    totalQty += num(line.quantity);
+    const serials = serialSuffix(line.serialNumbers ?? null);
+    const rate = formatCurrency(num(line.unitPrice as number));
+    const amount = formatCurrency(num(line.lineTotal as number));
+    const base: PDFTableRow = {
+      sl: idx + 1,
+      item: `${line.description}${serials}`,
+      hsn: line.hsnCode || "—",
+      qty: num(line.quantity),
+      rate,
+      amount,
+    };
+    if (withTaxColumns) {
+      return {
+        ...base,
+        disc: `${num(line.discountPercent as number)}%`,
+        taxable: formatCurrency(num((line.taxableValue ?? line.lineTotal) as number)),
+        gst: formatCurrency(
+          num((line.cgstAmount ?? 0) as number) +
+            num((line.sgstAmount ?? 0) as number) +
+            num((line.igstAmount ?? 0) as number),
+        ),
+      };
+    }
+    return base;
+  });
+
+  return { rows, totalQty };
+}
+
+function taxInvoiceColumns(): PDFTableColumn[] {
+  return [
+    { id: "sl", header: "#", width: 4, align: "center" },
+    { id: "item", header: "Item", width: 28 },
+    { id: "hsn", header: "HSN", width: 9, align: "center" },
+    { id: "qty", header: "Qty", width: 5, align: "center" },
+    { id: "rate", header: "Rate", width: 11, align: "right" },
+    { id: "disc", header: "Disc", width: 6, align: "center" },
+    { id: "taxable", header: "Taxable", width: 12, align: "right" },
+    { id: "gst", header: "GST", width: 10, align: "right" },
+    { id: "amount", header: "Amount", width: 15, align: "right" },
+  ];
+}
+
+function simpleInvoiceColumns(): PDFTableColumn[] {
+  return [
+    { id: "sl", header: "#", width: 5, align: "center" },
+    { id: "item", header: "Item", width: 44 },
+    { id: "hsn", header: "HSN", width: 10, align: "center" },
+    { id: "qty", header: "Qty", width: 7, align: "center" },
+    { id: "rate", header: "Rate", width: 14, align: "right" },
+    { id: "amount", header: "Amount", width: 20, align: "right" },
+  ];
+}
+
+// ---------------------------------------------------------------------------
+// Sales invoice: TAX_INVOICE (GST) or NON_GST_BILL
+// ---------------------------------------------------------------------------
+
 export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: Buffer; fileName: string }> {
   const invoice = await prisma.invoice.findUnique({
     where: { id: invoiceId },
     include: {
-      order: {
-        include: {
-          items: { include: { garmentType: true, service: true } },
-        },
-      },
       customer: true,
-      lines: true,
       branch: true,
-      payments: { orderBy: { paidAt: "desc" }, take: 1 },
+      lines: true,
+      createdBy: { select: { name: true } },
+      salesOrder: { select: { orderNumber: true } },
+      quotation: { select: { quotationNumber: true } },
     },
   });
 
   if (!invoice) throw new Error(`Invoice #${invoiceId} not found.`);
 
+  const isTaxInvoice = invoice.kind === "TAX_INVOICE";
   const company = await getCompanyProfile(invoice.firmId);
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(invoice.branch));
-  builder.renderDocumentTitle("Bill of Supply");
+  builder.renderDocumentTitle(isTaxInvoice ? "Tax Invoice" : "Bill of Supply");
 
-  const orderType = invoice.order ? ORDER_TYPE_LABEL[invoice.order.type] || invoice.order.type : "—";
+  const placeOfSupply = invoice.placeOfSupply || invoice.customer?.state || "—";
 
   builder.renderInfoColumns([
     {
       heading: "Bill To",
       lines: [
-        invoice.billToName || invoice.customer?.name || "Valued Customer",
-        `Contact No.: ${invoice.billToPhone || invoice.customer?.phone || "—"}`,
-      ],
-    },
-    {
-      heading: "Transportation Details",
-      lines: [
-        `Branch: ${invoice.branch.name}`,
-        `Pickup/Delivery: ${orderType}`,
-        `Delivery Date: ${invoice.order ? formatDate(invoice.order.expectedDeliveryAt) : "—"}`,
+        invoice.billToName,
+        ...(invoice.billToAddress ? [invoice.billToAddress] : []),
+        ...(invoice.billToGstin ? [`GSTIN: ${invoice.billToGstin}`] : []),
+        `Ph: ${invoice.billToPhone || "—"}`,
       ],
     },
     {
       heading: "Invoice Details",
       lines: [
-        `Invoice No.: ${invoice.invoiceNumber}`,
-        `Date: ${formatDate(invoice.issuedAt)}`,
-        `Time: ${formatTime(invoice.issuedAt)}`,
+        invoice.invoiceNumber,
+        `Date: ${formatDate(invoice.invoiceDate)}`,
+        `Place of Supply: ${placeOfSupply}`,
+        ...(invoice.salesOrder ? [`SO: ${invoice.salesOrder.orderNumber}`] : []),
+        ...(invoice.quotation ? [`Quote: ${invoice.quotation.quotationNumber}`] : []),
       ],
+    },
+    {
+      heading: isTaxInvoice ? "Tax Details" : "Details",
+      lines: isTaxInvoice
+        ? [
+            `Mode: Intra-state (CGST+SGST)`,
+            `vs Inter-state (IGST)`,
+            `Supplier: ${company.name}`,
+          ]
+        : [`Non-GST bill — no tax charged`, `Supplier: ${company.name}`],
     },
   ]);
 
-  const columns: PDFTableColumn[] = [
-    { id: "sl", header: "#", width: 5, align: "center" },
-    { id: "item", header: "Item Name", width: 33 },
-    { id: "qty", header: "Quantity", width: 13, align: "center" },
-    { id: "unit", header: "Unit", width: 9, align: "center" },
-    { id: "rate", header: "Final Rate", width: 18, align: "right" },
-    { id: "amount", header: "Amount", width: 22, align: "right" },
-  ];
+  const { rows, totalQty } = invoiceTableRows(invoice.lines, isTaxInvoice);
 
-  // Real per-item pricing from the order's own line items, not an evenly
-  // divided guess — each OrderItem already carries its actual quantity,
-  // pricing mode and computed line total.
-  const orderItems = invoice.order?.items ?? [];
-  let totalQty = 0;
+  const totals: TaxTotals = {
+    taxableAmount: num(invoice.taxableAmount),
+    cgstAmount: num(invoice.cgstAmount),
+    sgstAmount: num(invoice.sgstAmount),
+    igstAmount: num(invoice.igstAmount),
+  };
 
-  const rows: PDFTableRow[] =
-    orderItems.length > 0
-      ? orderItems.map((item, idx) => {
-          totalQty += item.quantity;
-          return {
-            sl: idx + 1,
-            item: `${item.garmentType.name} - ${item.service.name}`,
-            qty: item.quantity,
-            unit: UNIT_LABEL[item.pricingMode] || "-",
-            rate: formatCurrency(item.unitPrice),
-            amount: formatCurrency(item.lineTotal),
-          };
-        })
-      : invoice.lines.map((line, idx) => {
-          totalQty += num(line.quantity);
-          return {
-            sl: idx + 1,
-            item: line.description,
-            qty: num(line.quantity),
-            unit: "-",
-            rate: formatCurrency(line.unitPrice),
-            amount: formatCurrency(line.lineTotal),
-          };
-        });
+  const totalRow: PDFTableRow = isTaxInvoice
+    ? { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", disc: "", taxable: formatCurrency(totals.taxableAmount), gst: formatCurrency(totals.cgstAmount + totals.sgstAmount + totals.igstAmount), amount: formatCurrency(invoice.totalAmount) }
+    : { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", amount: formatCurrency(invoice.totalAmount) };
 
-  builder.renderItemsTable(columns, rows, {
-    sl: "",
-    item: "TOTAL",
-    qty: totalQty,
-    unit: "",
-    rate: "",
-    amount: formatCurrency(invoice.subtotal),
-  });
-
-  const gstAmount = num(invoice.cgstAmount) + num(invoice.sgstAmount) + num(invoice.igstAmount);
-  const paymentMode = invoice.payments[0]?.method || "Credit";
-  const currentBalance = invoice.customer ? num(invoice.customer.outstandingAmount) : num(invoice.amountDue);
-  const previousBalance = Math.max(0, currentBalance - num(invoice.amountDue));
+  builder.renderItemsTable(
+    isTaxInvoice ? taxInvoiceColumns() : simpleInvoiceColumns(),
+    rows,
+    totalRow,
+  );
 
   const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(invoice.subtotal) }];
   if (num(invoice.discountAmount) > 0) {
     summaryLines.push({ label: "Discount", value: `-${formatCurrency(invoice.discountAmount)}` });
   }
-  if (gstAmount > 0) {
-    summaryLines.push({ label: `GST (${num(invoice.gstRate)}%)`, value: formatCurrency(gstAmount) });
+  if (isTaxInvoice) {
+    summaryLines.push({ label: "Taxable Value", value: formatCurrency(totals.taxableAmount) });
+    if (totals.cgstAmount > 0) summaryLines.push({ label: "CGST", value: formatCurrency(totals.cgstAmount) });
+    if (totals.sgstAmount > 0) summaryLines.push({ label: "SGST", value: formatCurrency(totals.sgstAmount) });
+    if (totals.igstAmount > 0) summaryLines.push({ label: "IGST", value: formatCurrency(totals.igstAmount) });
+    if (num(invoice.roundOff) !== 0) {
+      summaryLines.push({ label: "Round Off", value: formatCurrency(invoice.roundOff) });
+    }
   }
   summaryLines.push(
     { label: "TOTAL", value: formatCurrency(invoice.totalAmount), highlight: true },
     { label: "Received", value: formatCurrency(invoice.amountPaid) },
-    { label: "Balance", value: formatCurrency(invoice.amountDue), bold: true },
-    { label: "Payment mode", value: paymentMode },
-    { label: "Previous Balance", value: formatCurrency(previousBalance) },
-    { label: "Current Balance", value: formatCurrency(currentBalance) },
+    { label: "Balance Due", value: formatCurrency(invoice.amountDue), bold: true },
   );
 
   builder.renderFinancialSummary({
-    amountWordsLabel: "Invoice Amount In Words",
+    amountWordsLabel: "Amount In Words",
     amountWords: amountInWords(invoice.totalAmount),
-    terms: company.termsConditions,
+    terms: invoice.terms || company.termsConditions,
     lines: summaryLines,
+    bankDetails: company.bankDetails || undefined,
   });
 
-  builder.renderSignatureBlock([{ title: "Authorized Signatory", name: `${company.name} - ${invoice.branch.name}` }]);
+  if (invoice.status === "CANCELLED") {
+    builder.renderCancelledStamp(invoice.cancellationReason || "This invoice has been cancelled");
+  }
+
+  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: invoice.createdBy?.name }]);
 
   const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Bill-${invoice.invoiceNumber}.pdf`,
-  };
+  const kindLabel = isTaxInvoice ? "Tax-Invoice" : "Bill";
+  return { buffer, fileName: `TECHNIC-${kindLabel}-${invoice.invoiceNumber.replace(/\//g, "-")}.pdf` };
 }
 
-/**
- * 2. Delivery Challan PDF Generator — non-financial: garments in transit,
- * never a subtotal/tax/paid/balance figure.
- */
-export async function generateChallanPDF(challanId: string): Promise<{ buffer: Buffer; fileName: string }> {
-  const challan = await prisma.deliveryChallan.findUnique({
-    where: { id: challanId },
+// ---------------------------------------------------------------------------
+// Quotation
+// ---------------------------------------------------------------------------
+
+export async function generateQuotationPDF(quotationId: string): Promise<{ buffer: Buffer; fileName: string }> {
+  const quotation = await prisma.quotation.findUnique({
+    where: { id: quotationId },
     include: {
-      order: true,
       customer: true,
-      items: true,
       branch: true,
+      lines: true,
+      createdBy: { select: { name: true } },
     },
   });
 
-  if (!challan) throw new Error(`Delivery Challan #${challanId} not found.`);
+  if (!quotation) throw new Error(`Quotation #${quotationId} not found.`);
 
-  const company = await getCompanyProfile(challan.firmId);
+  const company = await getCompanyProfile(quotation.firmId);
   const builder = new PDFDocumentBuilder(company);
 
-  builder.renderCompanyHeader(branchProfile(challan.branch));
-  builder.renderDocumentTitle("Delivery Challan");
-
-  const orderType = ORDER_TYPE_LABEL[challan.order.type] || challan.order.type;
+  builder.renderCompanyHeader(branchProfile(quotation.branch));
+  builder.renderDocumentTitle("Quotation");
 
   builder.renderInfoColumns([
     {
-      heading: "Delivery Challan For",
-      lines: [challan.customerName, `Contact No.: ${challan.customerPhone}`],
-    },
-    {
-      heading: "Ship To",
-      lines: [challan.customerAddress || challan.order.addressLine || "—"],
-    },
-    {
-      heading: "Transportation Details",
+      heading: "Quotation For",
       lines: [
-        `Branch: ${challan.branch.name}`,
-        `Pickup/Delivery: ${orderType}`,
-        `Delivery Date: ${formatDate(challan.deliveryDate || challan.expectedDeliveryDate)}`,
+        quotation.customer.name,
+        `Ph: ${quotation.customer.phone}`,
+        ...(quotation.customer.gstin ? [`GSTIN: ${quotation.customer.gstin}`] : []),
       ],
     },
     {
-      heading: "Challan Details",
+      heading: "Quotation Details",
       lines: [
-        `Challan No.: ${challan.challanNumber}`,
-        `Date: ${formatDate(challan.challanDate)}`,
-        `Time: ${formatTime(challan.challanDate)}`,
+        quotation.quotationNumber,
+        `Date: ${formatDate(quotation.quotationDate)}`,
+        ...(quotation.validUntil ? [`Valid Until: ${formatDate(quotation.validUntil)}`] : []),
+        `Status: ${quotation.status}`,
       ],
     },
   ]);
 
-  const columns: PDFTableColumn[] = [
-    { id: "sl", header: "#", width: 6, align: "center" },
-    { id: "item", header: "Item Name", width: 58 },
-    { id: "qty", header: "Quantity", width: 18, align: "center" },
-    { id: "unit", header: "Unit", width: 18, align: "center" },
-  ];
+  const isGst = quotation.taxMode === "GST";
+  const { rows, totalQty } = invoiceTableRows(quotation.lines, isGst);
+
+  builder.renderItemsTable(
+    isGst ? taxInvoiceColumns() : simpleInvoiceColumns(),
+    rows,
+    isGst
+      ? { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", disc: "", taxable: formatCurrency(quotation.taxableAmount), gst: formatCurrency(num(quotation.cgstAmount) + num(quotation.sgstAmount) + num(quotation.igstAmount)), amount: formatCurrency(quotation.totalAmount) }
+      : { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", amount: formatCurrency(quotation.totalAmount) },
+  );
+
+  const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(quotation.subtotal) }];
+  if (num(quotation.discountAmount) > 0) {
+    summaryLines.push({ label: "Discount", value: `-${formatCurrency(quotation.discountAmount)}` });
+  }
+  summaryLines.push({ label: "TOTAL", value: formatCurrency(quotation.totalAmount), highlight: true });
+
+  builder.renderFinancialSummary({
+    amountWordsLabel: "Amount In Words",
+    amountWords: amountInWords(quotation.totalAmount),
+    terms: quotation.terms || company.termsConditions,
+    lines: summaryLines,
+    bankDetails: company.bankDetails || undefined,
+  });
+
+  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: quotation.createdBy?.name }]);
+
+  const buffer = await builder.build();
+  return { buffer, fileName: `TECHNIC-Quotation-${quotation.quotationNumber.replace(/\//g, "-")}.pdf` };
+}
+
+// ---------------------------------------------------------------------------
+// Purchase order
+// ---------------------------------------------------------------------------
+
+export async function generatePurchaseOrderPDF(poId: string): Promise<{ buffer: Buffer; fileName: string }> {
+  const po = await prisma.purchaseOrder.findUnique({
+    where: { id: poId },
+    include: {
+      supplier: true,
+      branch: true,
+      items: true,
+      createdBy: { select: { name: true } },
+    },
+  });
+
+  if (!po) throw new Error(`Purchase order #${poId} not found.`);
+
+  const company = await getCompanyProfile(po.firmId);
+  const builder = new PDFDocumentBuilder(company);
+
+  builder.renderCompanyHeader(branchProfile(po.branch));
+  builder.renderDocumentTitle("Purchase Order");
+
+  builder.renderInfoColumns([
+    {
+      heading: "Supplier",
+      lines: [
+        po.supplier.name,
+        ...(po.supplier.gstin ? [`GSTIN: ${po.supplier.gstin}`] : []),
+        `Ph: ${po.supplier.phone || "—"}`,
+      ],
+    },
+    {
+      heading: "Delivery To",
+      lines: [po.branch.name, po.branch.city || company.address],
+    },
+    {
+      heading: "Order Details",
+      lines: [
+        po.poNumber,
+        `Date: ${formatDate(po.orderDate)}`,
+        ...(po.expectedDate ? [`Expected: ${formatDate(po.expectedDate)}`] : []),
+        `Status: ${po.status.replace(/_/g, " ")}`,
+      ],
+    },
+  ]);
 
   let totalQty = 0;
-  const rows: PDFTableRow[] = challan.items.map((item, idx) => {
+  const rows: PDFTableRow[] = po.items.map((item, idx) => {
     totalQty += item.quantity;
     return {
       sl: idx + 1,
-      item: item.description || item.category,
+      item: item.description,
+      hsn: item.hsnCode || "—",
       qty: item.quantity,
-      unit: "-",
+      rate: formatCurrency(item.unitPrice),
+      amount: formatCurrency(item.lineTotal),
     };
   });
 
-  builder.renderItemsTable(columns, rows, {
+  builder.renderItemsTable(simpleInvoiceColumns(), rows, {
     sl: "",
     item: "TOTAL",
+    hsn: "",
     qty: totalQty,
-    unit: "",
+    rate: "",
+    amount: formatCurrency(po.total),
   });
 
-  builder.renderNotesBlock(challan.terms || company.termsConditions);
+  const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(po.subtotal) }];
+  if (num(po.discountAmount) > 0) {
+    summaryLines.push({ label: "Discount", value: `-${formatCurrency(po.discountAmount)}` });
+  }
+  if (num(po.cgstAmount) > 0) summaryLines.push({ label: "CGST", value: formatCurrency(po.cgstAmount) });
+  if (num(po.sgstAmount) > 0) summaryLines.push({ label: "SGST", value: formatCurrency(po.sgstAmount) });
+  if (num(po.igstAmount) > 0) summaryLines.push({ label: "IGST", value: formatCurrency(po.igstAmount) });
+  summaryLines.push({ label: "TOTAL", value: formatCurrency(po.total), highlight: true });
+
+  builder.renderFinancialSummary({
+    amountWordsLabel: "Amount In Words",
+    amountWords: amountInWords(po.total),
+    terms: po.notes || undefined,
+    lines: summaryLines,
+  });
 
   builder.renderSignatureBlock(
     [
-      { title: "Customer Signature" },
-      { title: "Delivered By", name: challan.deliveredByName || "Driver" },
-      { title: "Authorized Signatory", name: `${company.name} - ${challan.branch.name}` },
+      { title: "Prepared By", name: po.createdBy?.name },
+      { title: `For ${company.name}` },
     ],
     "spread",
   );
 
   const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Delivery-Challan-${challan.challanNumber}.pdf`,
-  };
+  return { buffer, fileName: `TECHNIC-PO-${po.poNumber.replace(/\//g, "-")}.pdf` };
 }
 
-/**
- * 3. Payment Receipt PDF Generator
- */
+// ---------------------------------------------------------------------------
+// Purchase invoice (supplier bill)
+// ---------------------------------------------------------------------------
+
+export async function generatePurchaseInvoicePDF(invoiceId: string): Promise<{ buffer: Buffer; fileName: string }> {
+  const invoice = await prisma.purchaseInvoice.findUnique({
+    where: { id: invoiceId },
+    include: {
+      supplier: true,
+      branch: true,
+      lines: true,
+      po: { select: { poNumber: true } },
+      createdBy: { select: { name: true } },
+    },
+  });
+
+  if (!invoice) throw new Error(`Purchase invoice #${invoiceId} not found.`);
+
+  const company = await getCompanyProfile(invoice.firmId);
+  const builder = new PDFDocumentBuilder(company);
+
+  builder.renderCompanyHeader(branchProfile(invoice.branch));
+  builder.renderDocumentTitle("Purchase Bill");
+
+  builder.renderInfoColumns([
+    {
+      heading: "Supplier",
+      lines: [
+        invoice.supplier.name,
+        ...(invoice.supplier.gstin ? [`GSTIN: ${invoice.supplier.gstin}`] : []),
+        `Ph: ${invoice.supplier.phone || "—"}`,
+      ],
+    },
+    {
+      heading: "Bill Details",
+      lines: [
+        invoice.invoiceNumber,
+        `Date: ${formatDate(invoice.invoiceDate)}`,
+        ...(invoice.supplierRef ? [`Supplier Ref: ${invoice.supplierRef}`] : []),
+        ...(invoice.po ? [`PO: ${invoice.po.poNumber}`] : []),
+        ...(invoice.dueDate ? [`Due: ${formatDate(invoice.dueDate)}`] : []),
+      ],
+    },
+  ]);
+
+  let totalQty = 0;
+  const rows: PDFTableRow[] = invoice.lines.map((line, idx) => {
+    totalQty += line.quantity;
+    return {
+      sl: idx + 1,
+      item: `${line.description}${serialSuffix(line.serialNumbers)}`,
+      hsn: line.hsnCode || "—",
+      qty: line.quantity,
+      rate: formatCurrency(line.unitPrice),
+      amount: formatCurrency(line.lineTotal),
+    };
+  });
+
+  builder.renderItemsTable(simpleInvoiceColumns(), rows, {
+    sl: "",
+    item: "TOTAL",
+    hsn: "",
+    qty: totalQty,
+    rate: "",
+    amount: formatCurrency(invoice.total),
+  });
+
+  const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(invoice.subtotal) }];
+  if (num(invoice.discountAmount) > 0) {
+    summaryLines.push({ label: "Discount", value: `-${formatCurrency(invoice.discountAmount)}` });
+  }
+  if (num(invoice.cgstAmount) > 0) summaryLines.push({ label: "CGST", value: formatCurrency(invoice.cgstAmount) });
+  if (num(invoice.sgstAmount) > 0) summaryLines.push({ label: "SGST", value: formatCurrency(invoice.sgstAmount) });
+  if (num(invoice.igstAmount) > 0) summaryLines.push({ label: "IGST", value: formatCurrency(invoice.igstAmount) });
+  summaryLines.push(
+    { label: "TOTAL", value: formatCurrency(invoice.total), highlight: true },
+    { label: "Paid", value: formatCurrency(invoice.amountPaid) },
+    {
+      label: "Balance",
+      value: formatCurrency(Math.max(0, num(invoice.total) - num(invoice.amountPaid))),
+      bold: true,
+    },
+  );
+
+  builder.renderFinancialSummary({
+    amountWordsLabel: "Amount In Words",
+    amountWords: amountInWords(invoice.total),
+    terms: invoice.notes || undefined,
+    lines: summaryLines,
+    bankDetails: company.bankDetails || undefined,
+  });
+
+  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: invoice.createdBy?.name }]);
+
+  const buffer = await builder.build();
+  return { buffer, fileName: `TECHNIC-Purchase-Bill-${invoice.invoiceNumber.replace(/\//g, "-")}.pdf` };
+}
+
+// ---------------------------------------------------------------------------
+// Payment receipt
+// ---------------------------------------------------------------------------
+
 export async function generatePaymentReceiptPDF(paymentId: string): Promise<{ buffer: Buffer; fileName: string }> {
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
     include: {
-      order: { include: { customer: true } },
+      customer: true,
       invoice: true,
       branch: true,
-      receivedBy: true,
+      receivedBy: { select: { name: true } },
     },
   });
 
@@ -305,321 +557,53 @@ export async function generatePaymentReceiptPDF(paymentId: string): Promise<{ bu
   builder.renderInfoColumns([
     {
       heading: "Received From",
-      lines: [
-        payment.order?.customerName || "Valued Customer",
-        `Contact No.: ${payment.order?.customerPhone || "—"}`,
-      ],
+      lines: [payment.customer?.name || "Walk-in Customer", `Ph: ${payment.customer?.phone || "—"}`],
     },
     {
       heading: "Receipt Details",
       lines: [
-        `Receipt No.: ${payment.paymentNumber}`,
-        `Order No.: ${payment.order?.orderNumber || "—"}`,
-        `Invoice No.: ${payment.invoice?.invoiceNumber || "—"}`,
+        payment.paymentNumber,
         `Date: ${formatDate(payment.paidAt)}`,
-        `Time: ${formatTime(payment.paidAt)}`,
+        ...(payment.invoice ? [`Invoice: ${payment.invoice.invoiceNumber}`] : ["Advance / on account"]),
       ],
     },
   ]);
 
-  // Previous balance is a real derivation, not a stored/fabricated figure:
-  // the order's current outstanding amount already reflects this payment,
-  // so adding the payment back gives what was owed immediately before it.
-  const remainingBalance = payment.order ? Math.max(0, num(payment.order.outstandingAmount)) : 0;
-  const previousBalance = remainingBalance + num(payment.amount);
-
   const summaryLines: SummaryLine[] = [
     { label: "Amount Received", value: formatCurrency(payment.amount), highlight: true },
-    { label: "Payment Method", value: payment.method },
+    { label: "Payment Method", value: PAYMENT_METHOD_LABEL[payment.method] || payment.method },
   ];
-  if (payment.reference || payment.providerPaymentId) {
-    summaryLines.push({ label: "Transaction Reference", value: payment.reference || payment.providerPaymentId || "—" });
+  if (payment.reference) {
+    summaryLines.push({ label: "Reference", value: payment.reference });
   }
-  summaryLines.push(
-    { label: "Previous Balance", value: formatCurrency(previousBalance) },
-    { label: "Remaining Balance", value: formatCurrency(remainingBalance), bold: true },
-  );
+  if (payment.invoice) {
+    summaryLines.push(
+      { label: "Invoice Total", value: formatCurrency(payment.invoice.totalAmount) },
+      { label: "Balance After This Receipt", value: formatCurrency(payment.invoice.amountDue), bold: true },
+    );
+  }
 
   builder.renderFinancialSummary({
     amountWordsLabel: "Amount In Words",
     amountWords: amountInWords(payment.amount),
-    terms: "This is an official payment receipt issued by AURCLEAN.",
+    terms: "This is a computer-generated receipt issued by Technic Technologies.",
     lines: summaryLines,
   });
 
-  builder.renderSignatureBlock([
-    { title: "Authorized Signatory", name: payment.receivedBy?.name || `${company.name} - ${payment.branch.name}` },
-  ]);
+  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: payment.receivedBy?.name }]);
 
   const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Payment-Receipt-${payment.paymentNumber}.pdf`,
-  };
+  return { buffer, fileName: `TECHNIC-Receipt-${payment.paymentNumber.replace(/\//g, "-")}.pdf` };
 }
 
-/**
- * 4. Delivery Receipt PDF Generator — non-financial acknowledgement of
- * garments handed over to the customer.
- */
-export async function generateDeliveryReceiptPDF(deliveryId: string): Promise<{ buffer: Buffer; fileName: string }> {
-  const delivery = await prisma.delivery.findUnique({
-    where: { id: deliveryId },
-    include: {
-      order: { include: { garments: { include: { garmentType: true } } } },
-      driver: { include: { user: true } },
-      branch: true,
-    },
-  });
+// ---------------------------------------------------------------------------
+// Expense voucher
+// ---------------------------------------------------------------------------
 
-  if (!delivery) throw new Error(`Delivery #${deliveryId} not found.`);
-
-  const company = await getCompanyProfile(delivery.firmId);
-  const builder = new PDFDocumentBuilder(company);
-
-  builder.renderCompanyHeader(branchProfile(delivery.branch));
-  builder.renderDocumentTitle("Delivery Receipt");
-
-  const deliveredAt = delivery.deliveredAt || delivery.scheduledAt;
-
-  builder.renderInfoColumns([
-    {
-      heading: "Delivered To",
-      lines: [delivery.contactName, `Contact No.: ${delivery.contactPhone}`],
-    },
-    {
-      heading: "Delivery Details",
-      lines: [
-        `Delivery Receipt No.: ${delivery.deliveryNumber}`,
-        `Order No.: ${delivery.order.orderNumber}`,
-        `Delivery Date: ${formatDate(deliveredAt)}`,
-        `Delivery Time: ${formatTime(deliveredAt)}`,
-      ],
-    },
-  ]);
-
-  const columns: PDFTableColumn[] = [
-    { id: "sl", header: "#", width: 6, align: "center" },
-    { id: "item", header: "Item", width: 58 },
-    { id: "qty", header: "Quantity", width: 18, align: "center" },
-    { id: "unit", header: "Unit", width: 18, align: "center" },
-  ];
-
-  const rows: PDFTableRow[] = (delivery.order.garments || []).map((g, idx) => ({
-    sl: idx + 1,
-    item: g.garmentType.name,
-    qty: 1,
-    unit: "Pcs",
-  }));
-
-  builder.renderItemsTable(columns, rows, {
-    sl: "",
-    item: "TOTAL",
-    qty: rows.length,
-    unit: "",
-  });
-
-  builder.renderNotesBlock("Customer confirms receipt of garments in good condition.");
-
-  builder.renderSignatureBlock(
-    [
-      { title: "Received By", name: delivery.receivedByName || delivery.contactName },
-      { title: "Delivered By", name: delivery.driver?.user.name || "Courier" },
-      { title: "Customer Acknowledgement" },
-      { title: "Authorized Signatory", name: `${company.name} - ${delivery.branch.name}` },
-    ],
-    "spread",
-  );
-
-  const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Delivery-Receipt-${delivery.deliveryNumber}.pdf`,
-  };
-}
-
-/**
- * 5. Order Summary PDF Generator
- */
-export async function generateOrderSummaryPDF(orderId: string): Promise<{ buffer: Buffer; fileName: string }> {
-  const order = await prisma.order.findUnique({
-    where: { id: orderId },
-    include: {
-      customer: true,
-      items: { include: { service: true, garmentType: true } },
-      branch: true,
-    },
-  });
-
-  if (!order) throw new Error(`Order #${orderId} not found.`);
-
-  const company = await getCompanyProfile(order.firmId);
-  const builder = new PDFDocumentBuilder(company);
-
-  builder.renderCompanyHeader(branchProfile(order.branch));
-  builder.renderDocumentTitle("Order Summary");
-
-  builder.renderInfoColumns([
-    {
-      heading: "Customer",
-      lines: [order.customerName, `Contact No.: ${order.customerPhone}`],
-    },
-    {
-      heading: "Transportation Details",
-      lines: [
-        `Branch: ${order.branch.name}`,
-        `Pickup/Delivery: ${ORDER_TYPE_LABEL[order.type] || order.type}`,
-        `Delivery Date: ${formatDate(order.expectedDeliveryAt)}`,
-      ],
-    },
-    {
-      heading: "Order Details",
-      lines: [`Order No.: ${order.orderNumber}`, `Date: ${formatDate(order.placedAt)}`, `Time: ${formatTime(order.placedAt)}`],
-    },
-  ]);
-
-  const columns: PDFTableColumn[] = [
-    { id: "sl", header: "#", width: 5, align: "center" },
-    { id: "item", header: "Item Name", width: 33 },
-    { id: "qty", header: "Quantity", width: 13, align: "center" },
-    { id: "unit", header: "Unit", width: 9, align: "center" },
-    { id: "rate", header: "Final Rate", width: 18, align: "right" },
-    { id: "amount", header: "Amount", width: 22, align: "right" },
-  ];
-
-  let totalQty = 0;
-  const rows: PDFTableRow[] = order.items.map((item, idx) => {
-    totalQty += item.quantity;
-    return {
-      sl: idx + 1,
-      item: `${item.garmentType.name} - ${item.service.name}`,
-      qty: item.quantity,
-      unit: UNIT_LABEL[item.pricingMode] || "-",
-      rate: formatCurrency(item.unitPrice),
-      amount: formatCurrency(item.lineTotal),
-    };
-  });
-
-  builder.renderItemsTable(columns, rows, {
-    sl: "",
-    item: "TOTAL",
-    qty: totalQty,
-    unit: "",
-    rate: "",
-    amount: formatCurrency(order.subtotal),
-  });
-
-  const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(order.subtotal) }];
-  if (num(order.discountAmount) > 0) {
-    summaryLines.push({ label: "Discount", value: `-${formatCurrency(order.discountAmount)}` });
-  }
-  if (num(order.gstAmount) > 0) {
-    summaryLines.push({ label: `GST (${num(order.gstRate)}%)`, value: formatCurrency(order.gstAmount) });
-  }
-  summaryLines.push(
-    { label: "TOTAL", value: formatCurrency(order.totalAmount), highlight: true },
-    { label: "Paid", value: formatCurrency(order.paidAmount) },
-    { label: "Balance", value: formatCurrency(order.outstandingAmount), bold: true },
-  );
-
-  builder.renderFinancialSummary({
-    amountWordsLabel: "Amount In Words",
-    amountWords: amountInWords(order.totalAmount),
-    terms: order.specialInstructions || company.termsConditions,
-    lines: summaryLines,
-  });
-
-  builder.renderSignatureBlock([{ title: "Authorized Signatory", name: `${company.name} - ${order.branch.name}` }]);
-
-  const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Order-Summary-${order.orderNumber}.pdf`,
-  };
-}
-
-/**
- * 6. Customer Statement / Ledger PDF Generator
- */
-export async function generateStatementPDF(customerId: string): Promise<{ buffer: Buffer; fileName: string }> {
-  const customer = await prisma.customer.findUnique({
-    where: { id: customerId },
-    include: {
-      orders: { orderBy: { placedAt: "desc" }, take: 50 },
-      branch: true,
-    },
-  });
-
-  if (!customer) throw new Error(`Customer #${customerId} not found.`);
-
-  const company = await getCompanyProfile(customer.firmId);
-  const builder = new PDFDocumentBuilder(company);
-
-  const statementNo = `STM-${customer.code}-${Date.now().toString().slice(-4)}`;
-  builder.renderCompanyHeader(branchProfile(customer.branch));
-  builder.renderDocumentTitle("Customer Statement");
-
-  builder.renderInfoColumns([
-    {
-      heading: "Statement For",
-      lines: [customer.name, `Contact No.: ${customer.phone}`],
-    },
-    {
-      heading: "Account Summary",
-      lines: [`Total Orders: ${customer.orderCount}`, `Lifetime Spend: ${formatCurrency(customer.totalSpent)}`],
-    },
-    {
-      heading: "Statement Details",
-      lines: [`Statement No.: ${statementNo}`, `Date: ${formatDate(new Date())}`, `Time: ${formatTime(new Date())}`],
-    },
-  ]);
-
-  const columns: PDFTableColumn[] = [
-    { id: "sl", header: "#", width: 6, align: "center" },
-    { id: "item", header: "Order No", width: 24 },
-    { id: "date", header: "Date", width: 18 },
-    { id: "status", header: "Status", width: 18, align: "center" },
-    { id: "total", header: "Total", width: 17, align: "right" },
-    { id: "balance", header: "Balance", width: 17, align: "right" },
-  ];
-
-  const rows: PDFTableRow[] = customer.orders.map((ord, idx) => ({
-    sl: idx + 1,
-    item: ord.orderNumber,
-    date: formatDate(ord.placedAt),
-    status: ord.status.replace(/_/g, " "),
-    total: formatCurrency(ord.totalAmount),
-    balance: formatCurrency(ord.outstandingAmount),
-  }));
-
-  builder.renderItemsTable(columns, rows);
-
-  builder.renderFinancialSummary({
-    amountWordsLabel: "Outstanding Amount In Words",
-    amountWords: amountInWords(customer.outstandingAmount),
-    terms: "Statement of Account generated from AURCLEAN ERP.",
-    lines: [
-      { label: "Lifetime Spend", value: formatCurrency(customer.totalSpent) },
-      { label: "Outstanding Balance", value: formatCurrency(customer.outstandingAmount), highlight: true },
-    ],
-  });
-
-  builder.renderSignatureBlock([{ title: "Authorized Signatory", name: `${company.name} - ${customer.branch.name}` }]);
-
-  const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Statement-${customer.code}.pdf`,
-  };
-}
-
-/**
- * 7. Expense Voucher PDF Generator
- */
 export async function generateExpenseReceiptPDF(expenseId: string): Promise<{ buffer: Buffer; fileName: string }> {
   const expense = await prisma.expense.findUnique({
     where: { id: expenseId },
-    include: { branch: true, createdBy: true, approvedBy: true },
+    include: { branch: true, createdBy: { select: { name: true } }, approvedBy: { select: { name: true } } },
   });
 
   if (!expense) throw new Error(`Expense #${expenseId} not found.`);
@@ -632,39 +616,30 @@ export async function generateExpenseReceiptPDF(expenseId: string): Promise<{ bu
 
   builder.renderInfoColumns([
     {
-      heading: "Payee",
-      lines: [expense.paidTo || "Operational Expense", `Category: ${expense.category}`],
+      heading: "Paid To",
+      lines: [expense.paidTo || "Operational Expense", `Category: ${expense.category.replace(/_/g, " ")}`],
     },
     {
       heading: "Voucher Details",
       lines: [
-        `Expense No.: ${expense.expenseNumber}`,
+        expense.expenseNumber,
         `Date: ${formatDate(expense.expenseDate)}`,
-        `Payment Method: ${expense.paymentMethod}`,
+        `Method: ${PAYMENT_METHOD_LABEL[expense.paymentMethod] || expense.paymentMethod}`,
+        `Status: ${expense.status}`,
       ],
     },
   ]);
 
-  const columns: PDFTableColumn[] = [
-    { id: "sl", header: "#", width: 8, align: "center" },
-    { id: "item", header: "Description", width: 52 },
-    { id: "category", header: "Category", width: 20, align: "center" },
-    { id: "amount", header: "Amount", width: 20, align: "right" },
-  ];
-
   const rows: PDFTableRow[] = [
-    {
-      sl: 1,
-      item: expense.description,
-      category: expense.category,
-      amount: formatCurrency(expense.amount),
-    },
+    { sl: 1, item: expense.description, hsn: "—", qty: 1, rate: formatCurrency(expense.amount), amount: formatCurrency(expense.amount) },
   ];
 
-  builder.renderItemsTable(columns, rows, {
+  builder.renderItemsTable(simpleInvoiceColumns(), rows, {
     sl: "",
     item: "TOTAL",
-    category: "",
+    hsn: "",
+    qty: 1,
+    rate: "",
     amount: formatCurrency(expense.amount),
   });
 
@@ -677,14 +652,12 @@ export async function generateExpenseReceiptPDF(expenseId: string): Promise<{ bu
   builder.renderSignatureBlock(
     [
       { title: "Prepared By", name: expense.createdBy?.name || company.name },
-      { title: "Approved By", name: expense.approvedBy?.name || "Manager" },
+      { title: "Approved By", name: expense.approvedBy?.name },
+      { title: `For ${company.name}` },
     ],
     "spread",
   );
 
   const buffer = await builder.build();
-  return {
-    buffer,
-    fileName: `AURCLEAN-Expense-${expense.expenseNumber}.pdf`,
-  };
+  return { buffer, fileName: `TECHNIC-Expense-${expense.expenseNumber.replace(/\//g, "-")}.pdf` };
 }

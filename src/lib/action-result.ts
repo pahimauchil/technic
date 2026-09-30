@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { AccessModeError } from "@/lib/access-mode";
 import { AuthenticationError, AuthorizationError } from "@/lib/session";
 
 export type FieldErrors = Record<string, string[]>;
@@ -52,7 +53,8 @@ export function toActionResult(error: unknown): ActionResult<never> {
     error instanceof BusinessRuleError ||
     error instanceof NotFoundError ||
     error instanceof AuthorizationError ||
-    error instanceof AuthenticationError
+    error instanceof AuthenticationError ||
+    error instanceof AccessModeError
   ) {
     return fail(error.message);
   }
@@ -94,7 +96,7 @@ export const isPrismaNotFound = (error: unknown) => hasPrismaCode(error, "P2025"
 /** Maps an error to an HTTP status for route handlers. */
 export function errorStatus(error: unknown): number {
   if (error instanceof AuthenticationError) return 401;
-  if (error instanceof AuthorizationError) return 403;
+  if (error instanceof AuthorizationError || error instanceof AccessModeError) return 403;
   if (error instanceof NotFoundError || isPrismaNotFound(error)) return 404;
   if (error instanceof BusinessRuleError) return 409;
   if (error instanceof z.ZodError) return 422;

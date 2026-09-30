@@ -1,0 +1,181 @@
+import Link from "next/link";
+
+import { PageHeader } from "@/components/shared/page-header";
+import { DataTable, type Column } from "@/components/shared/data-table";
+import { FilterBar } from "@/components/shared/filter-bar";
+import { Pagination } from "@/components/shared/pagination";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { listInvoices } from "@/lib/services/invoice-list";
+import { requirePermissionInFirm } from "@/lib/session";
+import { formatCurrency } from "@/lib/money";
+import { formatDate } from "@/lib/dates";
+import { INVOICE_STATUS_LABELS } from "@/lib/workflow";
+import { parsePageParam, buildQuery } from "@/lib/utils";
+
+export const metadata = { title: "Invoices — Technic Technologies" };
+
+interface Row {
+  id: string;
+  invoiceNumber: string;
+  kind: string;
+  status: string;
+  invoiceDate: Date;
+  customerName: string;
+  total: number;
+  due: number;
+}
+
+export default async function InvoicesPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
+  const user = await requirePermissionInFirm("invoice.view");
+  const params = await searchParams;
+  const page = parsePageParam(params.page);
+
+  const { invoices, total, pageSize } = await listInvoices(user, {
+    q: params.q,
+    status: params.status,
+    kind: params.kind,
+    from: params.from,
+    to: params.to,
+    page,
+  });
+
+  const columns: Column<Row>[] = [
+    {
+      key: "number",
+      header: "Invoice #",
+      cell: (row) => (
+        <Link href={`/invoices/${row.id}`} className="font-medium hover:text-primary hover:underline">
+          {row.invoiceNumber}
+        </Link>
+      ),
+    },
+    {
+      key: "kind",
+      header: "Type",
+      hideOnMobile: true,
+      cell: (row) => (
+        <Badge tone={row.kind === "TAX_INVOICE" ? "info" : "neutral"}>
+          {row.kind === "TAX_INVOICE" ? "Tax Invoice" : "Bill"}
+        </Badge>
+      ),
+    },
+    { key: "customer", header: "Customer", cell: (row) => <span className="line-clamp-1">{row.customerName}</span> },
+    {
+      key: "date",
+      header: "Date",
+      hideOnMobile: true,
+      cell: (row) => <span className="numeric">{formatDate(row.invoiceDate)}</span>,
+    },
+    {
+      key: "total",
+      header: "Total",
+      headerClassName: "text-right",
+      className: "text-right numeric",
+      cell: (row) => formatCurrency(row.total),
+    },
+    {
+      key: "due",
+      header: "Balance",
+      headerClassName: "text-right",
+      className: "text-right numeric",
+      hideOnMobile: true,
+      cell: (row) => (row.due > 0 ? formatCurrency(row.due) : "—"),
+    },
+    {
+      key: "status",
+      header: "Status",
+      cell: (row) => (
+        <StatusBadge status={row.status} label={INVOICE_STATUS_LABELS[row.status] ?? row.status} dot />
+      ),
+    },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <PageHeader
+        title="Invoices"
+        description={
+          user.accessMode === "GST"
+            ? "Tax invoices and bills issued by your firm"
+            : "Non-GST bills issued by your firm"
+        }
+        actions={
+          <>
+            <Button asChild variant="outline">
+              <a href={`/api/export/invoices?${new URLSearchParams(
+                Object.entries(params).filter(([, v]) => v).map(([k, v]) => [k, v as string]),
+              ).toString()}`}>Export CSV</a>
+            </Button>
+            <Button asChild>
+              <Link href="/pos">New sale</Link>
+            </Button>
+          </>
+        }
+      />
+
+      <FilterBar
+        searchPlaceholder="Invoice #, customer…"
+        showDateRange
+        filters={[
+          {
+            name: "kind",
+            label: "Type",
+            options: [
+              { value: "GST", label: "Tax Invoice" },
+              { value: "NON_GST", label: "Bill" },
+            ],
+          },
+          {
+            name: "status",
+            label: "Status",
+            options: [
+              { value: "ISSUED", label: "Issued" },
+              { value: "PARTIALLY_PAID", label: "Partially paid" },
+              { value: "PAID", label: "Paid" },
+              { value: "CANCELLED", label: "Cancelled" },
+            ],
+          },
+        ]}
+      />
+
+      <DataTable
+        columns={columns}
+        rows={invoices}
+        getRowKey={(row) => row.id}
+        empty={
+          <EmptyState
+            title="No invoices found"
+            description="Raise your first sale from the POS."
+            action={
+              <Button asChild size="sm">
+                <Link href="/pos">Open POS</Link>
+              </Button>
+            }
+          />
+        }
+        renderMobileCard={(row) => (
+          <Link href={`/invoices/${row.id}`} className="block space-y-1.5">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-medium">{row.invoiceNumber}</span>
+              <StatusBadge status={row.status} label={INVOICE_STATUS_LABELS[row.status] ?? row.status} />
+            </div>
+            <p className="text-sm text-muted-foreground">{row.customerName}</p>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">{formatDate(row.invoiceDate)}</span>
+              <span className="numeric font-semibold">{formatCurrency(row.total)}</span>
+            </div>
+          </Link>
+        )}
+      />
+
+      <Pagination page={page} pageSize={pageSize} total={total} />
+    </div>
+  );
+}

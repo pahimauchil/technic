@@ -1,24 +1,23 @@
 "use client";
 
 import Link from "next/link";
-import { Menu, ScanLine } from "lucide-react";
+import { Menu } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { GlobalSearch } from "@/components/layout/global-search";
-import { NotificationBell } from "@/components/layout/notification-bell";
 import { UserMenu } from "@/components/layout/user-menu";
-import type { Alert } from "@/lib/services/alerts";
-import type { UserRole } from "@/generated/prisma/enums";
-
-import { AurcleanLogo } from "@/components/shared/aurclean-logo";
+import { AccessModeSwitcher } from "@/components/layout/access-mode-switcher";
+import { TechnicLogo } from "@/components/shared/technic-logo";
+import type { TaxMode, UserRole } from "@/generated/prisma/enums";
 
 interface TopbarProps {
   name: string;
   email: string;
   role: UserRole;
   branchName: string | null;
-  alerts: { alerts: Alert[]; total: number };
-  canScan: boolean;
+  firmName: string | null;
+  accessMode: TaxMode;
+  canSwitchMode: boolean;
   onOpenSidebar: () => void;
 }
 
@@ -27,8 +26,9 @@ export function Topbar({
   email,
   role,
   branchName,
-  alerts,
-  canScan,
+  firmName,
+  accessMode,
+  canSwitchMode,
   onOpenSidebar,
 }: TopbarProps) {
   return (
@@ -43,25 +43,22 @@ export function Topbar({
         <Menu />
       </Button>
 
-      <div className="lg:hidden flex items-center shrink-0 mr-1">
+      <div className="mr-1 flex shrink-0 items-center gap-2 lg:hidden">
         <Link href="/dashboard" className="flex items-center">
-          <AurcleanLogo size="sm" variant="full" theme="auto" />
+          <TechnicLogo size={22} theme="auto" />
         </Link>
+      </div>
+
+      <div className="hidden min-w-0 flex-col lg:flex">
+        <span className="truncate text-sm font-semibold leading-tight">{firmName ?? "Technic Technologies"}</span>
+        <span className="text-xs leading-tight text-muted-foreground">{branchName ?? "All branches"}</span>
       </div>
 
       <div className="min-w-0 flex-1">
         <GlobalSearch />
       </div>
 
-      {canScan ? (
-        <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex">
-          <Link href="/scan">
-            <ScanLine /> Scan
-          </Link>
-        </Button>
-      ) : null}
-
-      <NotificationBell feed={alerts} />
+      <AccessModeSwitcher mode={accessMode} canSwitch={canSwitchMode} />
 
       <UserMenu name={name} email={email} role={role} branchName={branchName} />
     </header>

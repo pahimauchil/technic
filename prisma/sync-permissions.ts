@@ -6,12 +6,11 @@
  * resolvePermissions in src/lib/permissions.server.ts), which falls back to
  * the static matrix only when role_permission is completely empty. That
  * means adding a new permission code to rbac.ts has no effect on a database
- * that has already been seeded once, until this is run — a new code silently
- * denies access to every role, including Super Admin, rather than granting
- * it. Run this after any change to the permission matrix.
+ * that has already been seeded once, until this is run. Run this after any
+ * change to the permission matrix.
  *
  * Unlike prisma/seed.ts this touches only the permission tables — it never
- * clears orders, customers, or any other business data.
+ * clears products, invoices, or any other business data.
  */
 import fs from "node:fs";
 import path from "node:path";
