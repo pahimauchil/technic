@@ -70,6 +70,7 @@ export default async function PosPage() {
         }))}
         customers={customers}
         canCollectPayment={user.permissions.includes("payments.create")}
+        canSwitchMode={user.permissions.includes("access_codes.manage") || user.role === "PLATFORM_ADMIN"}
       />
     </div>
   );

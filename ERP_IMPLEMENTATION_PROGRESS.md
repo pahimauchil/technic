@@ -240,6 +240,36 @@ without the pagination `page` param leaking in. Verified live: 200, correct
 headers, `kind=GST` and `status=PAID` filters respected, reports-page
 exports unaffected.
 
+## Permission-aware UI — hide what a role cannot use (30 Sep 2026)
+
+The sidebar already filtered nav items by permission, but several surfaces
+still showed forbidden affordances to restricted roles (they clicked through
+to /forbidden):
+
+- **Mobile bottom nav** was hardcoded (Home/Sell/Stock/Invoices for
+  everyone). Now `bottom-nav.tsx` takes the user's permissions and renders
+  only permitted links — Purchase Staff sees Home/Stock/More, Sales Staff
+  sees Home/Sell/Stock/Invoices/More.
+- **Dashboard "New sale"** now requires sales.create or invoice.create.
+- **Invoices page**: "New sale" gated the same way; **"Export CSV"** now
+  requires reports.export (the API already enforced it — Viewer could see
+  a button that 403'd).
+- **Purchases "Receive goods"** now requires purchase.create or
+  purchase.receive (the action authorizes purchase.receive).
+- **POS "switch mode" link** hidden unless access_codes.manage or
+  PLATFORM_ADMIN (the access-codes page already enforced this).
+
+Pages already correctly gated and verified unchanged: customers/suppliers/
+users/products/expenses/payments/quotations "add" buttons, invoice detail
+(record payment / new return / cancel), sales-return approve, expense
+approve, quotation convert, stock adjustments, transfers.
+
+All server-side authorization untouched (every action still runs
+`authorize(...)`; this change is UI-decluttering, not security). Verified
+live: Sales Staff (900005) and Purchase Staff (900006) see only their
+sections in sidebar + bottom nav; /pos bounces Purchase Staff to /forbidden
+while their own Receive goods button renders.
+
 ## Remaining Work
 
 - Replace demo access codes (900001–900008) and firm mode codes before go-live.

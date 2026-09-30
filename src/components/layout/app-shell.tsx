@@ -55,7 +55,7 @@ export function AppShell({ user, children }: AppShellProps) {
             {children}
           </div>
         </main>
-        <BottomNav onOpenSidebar={() => setSidebarOpen(true)} />
+        <BottomNav permissions={user.permissions} onOpenSidebar={() => setSidebarOpen(true)} />
       </div>
     </div>
   );

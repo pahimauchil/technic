@@ -108,16 +108,20 @@ export default async function InvoicesPage({
         }
         actions={
           <>
-            <Button asChild variant="outline">
-              <a href={`/api/export?type=invoices&${new URLSearchParams(
-                Object.entries(params)
-                  .filter(([key, value]) => value && ["q", "status", "kind", "from", "to"].includes(key))
-                  .map(([key, value]) => [key, value as string]),
-              ).toString()}`}>Export CSV</a>
-            </Button>
-            <Button asChild>
-              <Link href="/pos">New sale</Link>
-            </Button>
+            {user.permissions.includes("reports.export") ? (
+              <Button asChild variant="outline">
+                <a href={`/api/export?type=invoices&${new URLSearchParams(
+                  Object.entries(params)
+                    .filter(([key, value]) => value && ["q", "status", "kind", "from", "to"].includes(key))
+                    .map(([key, value]) => [key, value as string]),
+                ).toString()}`}>Export CSV</a>
+              </Button>
+            ) : null}
+            {user.permissions.includes("sales.create") || user.permissions.includes("invoice.create") ? (
+              <Button asChild>
+                <Link href="/pos">New sale</Link>
+              </Button>
+            ) : null}
           </>
         }
       />

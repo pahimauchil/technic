@@ -65,7 +65,7 @@ export default async function PurchasesPage() {
       <PageHeader
         title="Purchase Orders"
         description="Orders to suppliers — receiving goods books stock and the payable"
-        actions={user.permissions.includes("purchase.create") ? <NewPurchaseButton /> : null}
+        actions={user.permissions.includes("purchase.create") || user.permissions.includes("purchase.receive") ? <NewPurchaseButton /> : null}
       />
       <DataTable
         columns={columns}

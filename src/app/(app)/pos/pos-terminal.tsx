@@ -58,12 +58,14 @@ export function PosTerminal({
   products,
   customers,
   canCollectPayment,
+  canSwitchMode,
 }: {
   mode: "GST" | "NON_GST";
   branchId: string;
   products: PosProduct[];
   customers: PosCustomer[];
   canCollectPayment: boolean;
+  canSwitchMode: boolean;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -447,8 +449,12 @@ export function PosTerminal({
                 {pending ? "Billing…" : `Charge ${formatCurrency(totals.total)}`}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Invoice will be a {mode === "GST" ? "Tax Invoice" : "Non-GST bill"} —{" "}
-                <Link href="/access-codes" className="underline">switch mode</Link> to change
+                Invoice will be a {mode === "GST" ? "Tax Invoice" : "Non-GST bill"}
+                {canSwitchMode ? (
+                  <>
+                    {" "}— <Link href="/access-codes" className="underline">switch mode</Link> to change
+                  </>
+                ) : null}
               </p>
             </>
           ) : null}

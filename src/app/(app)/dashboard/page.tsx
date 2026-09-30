@@ -38,11 +38,13 @@ export default async function DashboardPage() {
         title={`Good day, ${user.name.split(" ")[0]}`}
         description={`Business overview for ${user.activeFirmName} — ${mode === "GST" ? "GST" : "non-GST"} mode`}
         actions={
-          <Button asChild>
-            <Link href="/pos">
-              <ShoppingBag /> New sale
-            </Link>
-          </Button>
+          user.permissions.includes("sales.create") || user.permissions.includes("invoice.create") ? (
+            <Button asChild>
+              <Link href="/pos">
+                <ShoppingBag /> New sale
+              </Link>
+            </Button>
+          ) : null
         }
       />
 
