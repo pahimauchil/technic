@@ -110,9 +110,9 @@ src/app/(app)/     Feature modules (pos, invoices, purchases, inventory, ...)
 src/lib/services/  Business logic — all rules enforced server-side
 src/lib/pdf/       Branded PDF document templates
 prisma/            Schema, migrations, seed
-docs/              Requirements & handover documents
 ```
 
 ## Support
 
-Built for Technic Technologies Pvt Ltd, Bengaluru. See `ERP_IMPLEMENTATION_PROGRESS.md` for the verification log against the handover requirements.
+Built for Technic Technologies Pvt Ltd, Bengaluru. See `ERP_IMPLEMENTATION_PROGRESS.md`
+for the verification log against the original handover requirements.
