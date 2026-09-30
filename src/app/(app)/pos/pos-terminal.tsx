@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { checkoutAction } from "./actions";
 import { formatCurrency } from "@/lib/money";
+import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
 import { cn } from "@/lib/utils";
 
 interface PosProduct {
@@ -43,8 +44,10 @@ interface CartLine {
   productId: string;
   variantId: string | null;
   name: string;
-  quantity: number;
-  unitPrice: number;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  quantity: string;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  unitPrice: string;
   gstRate: number;
   trackSerials: boolean;
   serials: string[];
@@ -90,7 +93,9 @@ export function PosTerminal({
       const existing = current.find((line) => line.key === key);
       if (existing) {
         return current.map((line) =>
-          line.key === key ? { ...line, quantity: line.quantity + 1 } : line,
+          line.key === key
+            ? { ...line, quantity: String(parseNumericInput(line.quantity) + 1) }
+            : line,
         );
       }
       return [
@@ -100,8 +105,8 @@ export function PosTerminal({
           productId: product.id,
           variantId: variantId ?? null,
           name: variant ? `${product.name} — ${variant.name}` : product.name,
-          quantity: 1,
-          unitPrice: variant?.sellingPrice ?? product.sellingPrice,
+          quantity: "1",
+          unitPrice: String(variant?.sellingPrice ?? product.sellingPrice),
           gstRate: product.gstRate,
           trackSerials: product.trackSerials,
           serials: Array.from({ length: 1 }, () => ""),
@@ -116,7 +121,7 @@ export function PosTerminal({
     let cgst = 0;
     let sgst = 0;
     for (const line of cart) {
-      const gross = line.unitPrice * line.quantity;
+      const gross = parseNumericInput(line.unitPrice) * parseNumericInput(line.quantity);
       subtotal += gross;
       const lineTaxable = mode === "GST" ? gross / (1 + line.gstRate / 100) : gross;
       taxable += lineTaxable;
@@ -145,8 +150,8 @@ export function PosTerminal({
     for (const line of cart) {
       if (line.trackSerials) {
         const serials = line.serials.map((s) => s.trim()).filter(Boolean);
-        if (serials.length !== line.quantity) {
-          toast.error(`${line.name} needs ${line.quantity} serial number(s)`);
+        if (serials.length !== parseNumericInput(line.quantity)) {
+          toast.error(`${line.name} needs ${parseNumericInput(line.quantity)} serial number(s)`);
           return;
         }
       }
@@ -157,8 +162,8 @@ export function PosTerminal({
         lines: cart.map((line) => ({
           productId: line.productId,
           variantId: line.variantId,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
+          quantity: parseNumericInput(line.quantity),
+          unitPrice: parseNumericInput(line.unitPrice),
           gstRate: mode === "GST" ? line.gstRate : 0,
           serialNumbers: line.trackSerials ? line.serials.map((s) => s.trim()).filter(Boolean) : undefined,
         })),
@@ -285,7 +290,9 @@ export function PosTerminal({
                       onClick={() =>
                         setCart((current) =>
                           current.map((l) =>
-                            l.key === line.key ? { ...l, quantity: Math.max(1, l.quantity - 1) } : l,
+                            l.key === line.key
+                              ? { ...l, quantity: String(Math.max(1, parseNumericInput(l.quantity) - 1)) }
+                              : l,
                           ),
                         )
                       }
@@ -295,12 +302,21 @@ export function PosTerminal({
                     </Button>
                     <Input
                       className="h-8 w-14 text-center numeric"
+                      type="number"
+                      min="1"
                       value={line.quantity}
                       onChange={(event) =>
                         setCart((current) =>
                           current.map((l) =>
+                            l.key === line.key ? { ...l, quantity: event.target.value } : l,
+                          ),
+                        )
+                      }
+                      onBlur={(event) =>
+                        setCart((current) =>
+                          current.map((l) =>
                             l.key === line.key
-                              ? { ...l, quantity: Math.max(1, Number(event.target.value) || 1) }
+                              ? { ...l, quantity: tidyQuantityOnBlur(event.target.value) }
                               : l,
                           ),
                         )
@@ -312,7 +328,11 @@ export function PosTerminal({
                       variant="outline"
                       onClick={() =>
                         setCart((current) =>
-                          current.map((l) => (l.key === line.key ? { ...l, quantity: l.quantity + 1 } : l)),
+                          current.map((l) =>
+                            l.key === line.key
+                              ? { ...l, quantity: String(parseNumericInput(l.quantity) + 1) }
+                              : l,
+                          ),
                         )
                       }
                       aria-label="Increase"
@@ -322,23 +342,33 @@ export function PosTerminal({
                   </div>
                   <Input
                     className="h-8 w-28 numeric"
+                    type="number"
+                    min="0"
+                    step="0.01"
                     value={line.unitPrice}
                     onChange={(event) =>
                       setCart((current) =>
                         current.map((l) =>
-                          l.key === line.key ? { ...l, unitPrice: Number(event.target.value) || 0 } : l,
+                          l.key === line.key ? { ...l, unitPrice: event.target.value } : l,
+                        ),
+                      )
+                    }
+                    onBlur={(event) =>
+                      setCart((current) =>
+                        current.map((l) =>
+                          l.key === line.key ? { ...l, unitPrice: tidyAmountOnBlur(event.target.value) } : l,
                         ),
                       )
                     }
                     aria-label="Unit price"
                   />
                   <span className="numeric ml-auto text-sm font-semibold">
-                    {formatCurrency(line.unitPrice * line.quantity)}
+                    {formatCurrency(parseNumericInput(line.unitPrice) * parseNumericInput(line.quantity))}
                   </span>
                 </div>
                 {line.trackSerials ? (
                   <div className="space-y-1.5">
-                    {Array.from({ length: line.quantity }, (_, index) => (
+                    {Array.from({ length: parseNumericInput(line.quantity) }, (_, index) => (
                       <Input
                         key={index}
                         className="h-8 font-mono text-xs"
@@ -349,7 +379,7 @@ export function PosTerminal({
                             current.map((l) => {
                               if (l.key !== line.key) return l;
                               const serials = [...l.serials];
-                              while (serials.length < l.quantity) serials.push("");
+                              while (serials.length < parseNumericInput(l.quantity)) serials.push("");
                               serials[index] = event.target.value;
                               return { ...l, serials };
                             }),

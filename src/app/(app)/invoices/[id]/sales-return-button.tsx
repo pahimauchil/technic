@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parseNumericInput, tidyOptionalQuantityOnBlur } from "@/lib/numeric-input";
 import { createSalesReturnAction } from "./actions";
 
 const REFUND_METHODS = [
@@ -55,13 +56,14 @@ export function SalesReturnButton({
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [method, setMethod] = useState("CASH");
-  const [qtys, setQtys] = useState<Record<string, number>>({});
+  /** Per-line raw input text — kept as strings so fields can be cleared while editing. */
+  const [qtys, setQtys] = useState<Record<string, string>>({});
   const [serials, setSerials] = useState<Record<string, string>>({});
   const [pending, startTransition] = useTransition();
 
   const returnable = lines.filter((l) => l.quantity > l.returnedQty);
   const total = lines.reduce(
-    (sum, l) => sum + (qtys[l.invoiceLineId] ?? 0) * l.unitPrice,
+    (sum, l) => sum + parseNumericInput(qtys[l.invoiceLineId] ?? "") * l.unitPrice,
     0,
   );
 
@@ -69,7 +71,7 @@ export function SalesReturnButton({
     startTransition(async () => {
       const payloadLines = returnable
         .map((l): { invoiceLineId: string; quantity: number; serialNumbers?: string[] } | null => {
-          const quantity = qtys[l.invoiceLineId] ?? 0;
+          const quantity = parseNumericInput(qtys[l.invoiceLineId] ?? "");
           if (quantity <= 0) return null;
           const serialList = l.serialNumbers.length
             ? (serials[l.invoiceLineId] ?? "")
@@ -141,7 +143,13 @@ export function SalesReturnButton({
                     onChange={(e) =>
                       setQtys((prev) => ({
                         ...prev,
-                        [line.invoiceLineId]: Number(e.target.value),
+                        [line.invoiceLineId]: e.target.value,
+                      }))
+                    }
+                    onBlur={(e) =>
+                      setQtys((prev) => ({
+                        ...prev,
+                        [line.invoiceLineId]: tidyOptionalQuantityOnBlur(e.target.value),
                       }))
                     }
                   />

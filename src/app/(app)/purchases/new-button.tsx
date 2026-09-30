@@ -24,6 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
 import { receiveGoodsAction } from "./actions";
 
 interface ProductOption {
@@ -42,8 +43,10 @@ interface SupplierOption {
 interface Line {
   key: number;
   productId: string;
-  quantity: number;
-  unitPrice: number;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  quantity: string;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  unitPrice: string;
   serials: string;
 }
 
@@ -57,7 +60,7 @@ export function NewPurchaseButton() {
   const [supplierId, setSupplierId] = useState("");
   const [supplierRef, setSupplierRef] = useState("");
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: 1, unitPrice: 0, serials: "" }]);
+  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0", serials: "" }]);
   const [pending, startTransition] = useTransition();
 
   const loadOptions = async () => {
@@ -76,7 +79,7 @@ export function NewPurchaseButton() {
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...updates } : line)));
 
   const addLine = () =>
-    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: 1, unitPrice: 0, serials: "" }]);
+    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", serials: "" }]);
 
   const submit = () => {
     startTransition(async () => {
@@ -88,8 +91,8 @@ export function NewPurchaseButton() {
           .filter((line) => line.productId)
           .map((line) => ({
             productId: line.productId,
-            quantity: line.quantity,
-            unitPrice: line.unitPrice,
+            quantity: parseNumericInput(line.quantity),
+            unitPrice: parseNumericInput(line.unitPrice),
             serialNumbers:
               productById.get(line.productId)?.trackSerials
                 ? line.serials.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
@@ -99,7 +102,7 @@ export function NewPurchaseButton() {
       if (result.ok) {
         toast.success(`Goods received — bill ${result.data.invoiceNumber}`);
         setOpen(false);
-        setLines([{ key: (lineKey += 1), productId: "", quantity: 1, unitPrice: 0, serials: "" }]);
+        setLines([{ key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", serials: "" }]);
         setPaymentAmount("");
         router.refresh();
       } else {
@@ -145,7 +148,7 @@ export function NewPurchaseButton() {
                     value={line.productId}
                     onValueChange={(value) => {
                       const next = productById.get(value);
-                      setLine(line.key, { productId: value, unitPrice: next?.purchasePrice ?? 0 });
+                      setLine(line.key, { productId: value, unitPrice: String(next?.purchasePrice ?? 0) });
                     }}
                   >
                     <SelectTrigger className="flex-1"><SelectValue placeholder="Product" /></SelectTrigger>
@@ -159,12 +162,14 @@ export function NewPurchaseButton() {
                   </Select>
                   <Input
                     className="w-20 numeric" type="number" min="1" value={line.quantity}
-                    onChange={(e) => setLine(line.key, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                    onChange={(e) => setLine(line.key, { quantity: e.target.value })}
+                    onBlur={(e) => setLine(line.key, { quantity: tidyQuantityOnBlur(e.target.value) })}
                     aria-label="Quantity"
                   />
                   <Input
-                    className="w-28 numeric" type="number" min="0" value={line.unitPrice}
-                    onChange={(e) => setLine(line.key, { unitPrice: Number(e.target.value) || 0 })}
+                    className="w-28 numeric" type="number" min="0" step="0.01" value={line.unitPrice}
+                    onChange={(e) => setLine(line.key, { unitPrice: e.target.value })}
+                    onBlur={(e) => setLine(line.key, { unitPrice: tidyAmountOnBlur(e.target.value) })}
                     aria-label="Unit cost"
                   />
                   <Button size="icon-sm" variant="ghost" className="text-destructive"

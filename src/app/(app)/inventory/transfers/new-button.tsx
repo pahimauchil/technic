@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { parseNumericInput, tidyQuantityOnBlur } from "@/lib/numeric-input";
 import { createTransferAction } from "./actions";
 
 interface Line {
@@ -31,7 +32,8 @@ interface Line {
   productId: string;
   productName: string;
   trackSerials: boolean;
-  quantity: number;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  quantity: string;
   serials: string;
 }
 
@@ -44,7 +46,7 @@ export function NewTransferButton() {
   const [products, setProducts] = useState<{ id: string; name: string; sku: string; trackSerials: boolean }[]>([]);
   const [fromBranchId, setFromBranchId] = useState("");
   const [toBranchId, setToBranchId] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", productName: "", trackSerials: false, quantity: 1, serials: "" }]);
+  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", productName: "", trackSerials: false, quantity: "1", serials: "" }]);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -77,7 +79,7 @@ export function NewTransferButton() {
           .filter((line) => line.productId)
           .map((line) => ({
             productId: line.productId,
-            quantity: line.quantity,
+            quantity: parseNumericInput(line.quantity),
             serialNumbers: line.trackSerials
               ? line.serials.split(/[\n,]/).map((s) => s.trim()).filter(Boolean)
               : undefined,
@@ -86,7 +88,7 @@ export function NewTransferButton() {
       if (result.ok) {
         toast.success(`Transfer ${result.data.transferNumber} created`);
         setOpen(false);
-        setLines([{ key: (key += 1), productId: "", productName: "", trackSerials: false, quantity: 1, serials: "" }]);
+        setLines([{ key: (key += 1), productId: "", productName: "", trackSerials: false, quantity: "1", serials: "" }]);
         router.refresh();
       } else {
         toast.error(result.error);
@@ -146,7 +148,8 @@ export function NewTransferButton() {
                 </Select>
                 <Input
                   className="w-20 numeric" type="number" min="1" value={line.quantity}
-                  onChange={(e) => setLine(line.key, { quantity: Math.max(1, Number(e.target.value) || 1) })}
+                  onChange={(e) => setLine(line.key, { quantity: e.target.value })}
+                  onBlur={(e) => setLine(line.key, { quantity: tidyQuantityOnBlur(e.target.value) })}
                   aria-label="Quantity"
                 />
                 <Button size="icon-sm" variant="ghost" className="text-destructive"
@@ -163,7 +166,7 @@ export function NewTransferButton() {
               ) : null}
             </div>
           ))}
-          <Button size="sm" variant="outline" onClick={() => setLines((c) => [...c, { key: (key += 1), productId: "", productName: "", trackSerials: false, quantity: 1, serials: "" }])}>
+          <Button size="sm" variant="outline" onClick={() => setLines((c) => [...c, { key: (key += 1), productId: "", productName: "", trackSerials: false, quantity: "1", serials: "" }])}>
             <Plus /> Add item
           </Button>
         </div>
