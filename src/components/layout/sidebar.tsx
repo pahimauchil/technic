@@ -25,14 +25,25 @@ interface SidebarProps {
   };
 }
 
-function isActive(pathname: string, item: NavItem) {
+function isActive(pathname: string, item: NavItem, allHrefs: string[]) {
   if (item.exact) return pathname === item.href;
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  if (pathname === item.href) return true;
+  if (!pathname.startsWith(`${item.href}/`)) return false;
+  // A parent link (e.g. "Stock" at /inventory) must not stay highlighted
+  // when a deeper nav item ("Stock Adjustments" at /inventory/adjustments)
+  // matches the current path.
+  return !allHrefs.some(
+    (href) =>
+      href !== item.href &&
+      href.startsWith(`${item.href}/`) &&
+      pathname.startsWith(href),
+  );
 }
 
 export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
   const pathname = usePathname();
   const sections = visibleSections(permissions);
+  const allHrefs = sections.flatMap((section) => section.items.map((item) => item.href));
 
   return (
     <>
@@ -74,7 +85,7 @@ export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
                   {section.label}
                 </p>
               ) : null}
-              <NavGroup items={section.items} pathname={pathname} onNavigate={onClose} />
+              <NavGroup items={section.items} pathname={pathname} allHrefs={allHrefs} onNavigate={onClose} />
             </div>
           ))}
         </nav>
@@ -109,16 +120,18 @@ export function Sidebar({ permissions, open, onClose, user }: SidebarProps) {
 function NavGroup({
   items,
   pathname,
+  allHrefs,
   onNavigate,
 }: {
   items: NavItem[];
   pathname: string;
+  allHrefs: string[];
   onNavigate: () => void;
 }) {
   return (
     <ul className="space-y-0.5">
       {items.map((item) => {
-        const active = isActive(pathname, item);
+        const active = isActive(pathname, item, allHrefs);
         return (
           <li key={item.href}>
             <Link
