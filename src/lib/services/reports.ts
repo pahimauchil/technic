@@ -2,7 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/session";
-import { resolveBranchScope, requireFirmId } from "@/lib/session";
+import { resolveBranchScope, requireFirmId, taxModeWhere } from "@/lib/session";
 import { num } from "@/lib/money";
 import { resolveDateRange, type DateRange } from "@/lib/dates";
 import { financialYearFor } from "@/lib/sequence";
@@ -95,6 +95,7 @@ export async function salesReport(
   const firmId = requireFirmId(user);
   const scope = resolveBranchScope(user, options.branchId ?? null);
   const range = reportRange(options.preset ?? "this_month", options.from, options.to);
+  const tm = taxModeWhere(user);
 
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -102,6 +103,7 @@ export async function salesReport(
       status: { not: "CANCELLED" },
       invoiceDate: { gte: range.from, lte: range.to },
       ...(scope.branchId ? { branchId: scope.branchId } : {}),
+      ...tm,
     },
     include: { createdBy: { select: { name: true } } },
     orderBy: { invoiceDate: "desc" },
@@ -143,6 +145,7 @@ export async function purchaseReport(
   const firmId = requireFirmId(user);
   const scope = resolveBranchScope(user, options.branchId ?? null);
   const range = reportRange(options.preset ?? "this_month", options.from, options.to);
+  const tm = taxModeWhere(user);
 
   const invoices = await prisma.purchaseInvoice.findMany({
     where: {
@@ -151,6 +154,7 @@ export async function purchaseReport(
       invoiceDate: { gte: range.from, lte: range.to },
       ...(scope.branchId ? { branchId: scope.branchId } : {}),
       ...(options.supplierId ? { supplierId: options.supplierId } : {}),
+      ...tm,
     },
     include: { supplier: { select: { name: true } } },
     orderBy: { invoiceDate: "desc" },
@@ -277,6 +281,7 @@ export async function productSalesReport(
         status: { not: "CANCELLED" },
         invoiceDate: { gte: range.from, lte: range.to },
         ...(scope.branchId ? { branchId: scope.branchId } : {}),
+        ...taxModeWhere(user),
       },
     },
     include: {
@@ -309,14 +314,15 @@ export async function financialSummary(
   const scope = resolveBranchScope(user, options.branchId ?? null);
   const range = reportRange(options.preset ?? "this_month", options.from, options.to);
   const branchWhere = scope.branchId ? { branchId: scope.branchId } : {};
+  const tm = taxModeWhere(user);
 
   const [sales, purchases, expenses, receivablesAgg, payablesAgg] = await Promise.all([
     prisma.invoice.aggregate({
-      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: range.from, lte: range.to }, ...branchWhere },
+      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: range.from, lte: range.to }, ...branchWhere, ...tm },
       _sum: { totalAmount: true, amountPaid: true, cgstAmount: true, sgstAmount: true, igstAmount: true },
     }),
     prisma.purchaseInvoice.aggregate({
-      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: range.from, lte: range.to }, ...branchWhere },
+      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: range.from, lte: range.to }, ...branchWhere, ...tm },
       _sum: { total: true, amountPaid: true },
     }),
     prisma.expense.aggregate({

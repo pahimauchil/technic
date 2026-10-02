@@ -7,8 +7,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Topbar } from "@/components/layout/topbar";
 import { BottomNav } from "@/components/layout/bottom-nav";
 import type { PermissionCode } from "@/lib/rbac";
-import { isPlatformRole } from "@/lib/rbac";
-import type { TaxMode, UserRole } from "@/generated/prisma/enums";
+import type { UserRole } from "@/generated/prisma/enums";
 
 interface AppShellProps {
   user: {
@@ -18,7 +17,6 @@ interface AppShellProps {
     branchName: string | null;
     firmName: string | null;
     permissions: PermissionCode[];
-    accessMode: TaxMode;
   };
   children: ReactNode;
 }
@@ -26,8 +24,6 @@ interface AppShellProps {
 export function AppShell({ user, children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const canSwitchMode =
-    isPlatformRole(user.role) || user.permissions.includes("access_codes.manage" as PermissionCode);
 
   return (
     <div className="min-h-dvh bg-background">
@@ -45,8 +41,6 @@ export function AppShell({ user, children }: AppShellProps) {
             role={user.role}
             branchName={user.branchName}
             firmName={user.firmName}
-            accessMode={user.accessMode}
-            canSwitchMode={canSwitchMode}
             onOpenSidebar={() => setSidebarOpen(true)}
           />
         </div>

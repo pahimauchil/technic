@@ -26,8 +26,16 @@ export default async function ProductsPage({
   const firmId = user.activeFirmId;
   const scope = resolveBranchScope(user, params.branchId ?? null);
 
+  const PRODUCT_STATUSES = ["ACTIVE", "INACTIVE"] as const;
+  type ProductStatusValue = (typeof PRODUCT_STATUSES)[number];
+  const status = PRODUCT_STATUSES.includes(params.status as ProductStatusValue)
+    ? (params.status as ProductStatusValue)
+    : "ACTIVE";
+
   const where = {
     firmId,
+    // Active by default; the Status filter opts into deactivated items.
+    status,
     ...(params.q
       ? {
           OR: [
@@ -149,6 +157,14 @@ export default async function ProductsPage({
             name: "category",
             label: "Category",
             options: categories.map((category) => ({ value: category.id, label: category.name })),
+          },
+          {
+            name: "status",
+            label: "Status",
+            options: [
+              { value: "ACTIVE", label: "Active" },
+              { value: "INACTIVE", label: "Deactivated" },
+            ],
           },
         ]}
       />

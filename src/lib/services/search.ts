@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { NotFoundError } from "@/lib/action-result";
 import { num } from "@/lib/money";
 import { getStockByBranch, getStockLevel } from "@/lib/services/inventory";
+import { taxModeWhere } from "@/lib/session";
 
 /**
  * Global search (topbar) and POS product lookup. Everything is firm-scoped;
@@ -18,7 +19,12 @@ export interface SearchHit {
   href: string;
 }
 
-export async function globalSearch(firmId: string, query: string, take = 8): Promise<SearchHit[]> {
+export async function globalSearch(
+  firmId: string,
+  query: string,
+  take = 8,
+  taxModeFilter: Record<string, never> | Record<string, string> = {},
+): Promise<SearchHit[]> {
   const cleaned = query.trim();
   if (cleaned.length < 2) return [];
   const contains = { contains: cleaned, mode: "insensitive" as const };
@@ -47,7 +53,7 @@ export async function globalSearch(firmId: string, query: string, take = 8): Pro
       take,
     }),
     prisma.invoice.findMany({
-      where: { firmId, OR: [{ invoiceNumber: contains }, { billToName: contains }] },
+      where: { firmId, ...taxModeFilter, OR: [{ invoiceNumber: contains }, { billToName: contains }] },
       select: { id: true, invoiceNumber: true, billToName: true, totalAmount: true, status: true },
       take,
     }),
@@ -57,7 +63,7 @@ export async function globalSearch(firmId: string, query: string, take = 8): Pro
       take,
     }),
     prisma.quotation.findMany({
-      where: { firmId, OR: [{ quotationNumber: contains }, { customer: { name: contains } }] },
+      where: { firmId, ...taxModeFilter, OR: [{ quotationNumber: contains }, { customer: { name: contains } }] },
       select: { id: true, quotationNumber: true, customerId: true, totalAmount: true },
       take,
     }),

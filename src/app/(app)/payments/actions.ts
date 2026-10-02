@@ -2,9 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 
-import { runAction } from "@/lib/action-result";
-import { authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
+import { runAction, NotFoundError } from "@/lib/action-result";
+import { authorize, requireFirmId, requireWriteBranch, taxModeWhere } from "@/lib/session";
 import { recordCustomerPayment } from "@/lib/services/payments";
+import { prisma } from "@/lib/prisma";
 
 export async function recordPaymentAction(input: {
   customerId: string;
@@ -16,6 +17,15 @@ export async function recordPaymentAction(input: {
     const user = await authorize("payments.create");
     const firmId = requireFirmId(user);
     const branchId = await requireWriteBranch(user, null);
+
+    // View isolation: invoice-linked payments may only target invoices in view.
+    if (input.invoiceId) {
+      const invoice = await prisma.invoice.findFirst({
+        where: { id: input.invoiceId, firmId, ...taxModeWhere(user) },
+        select: { id: true },
+      });
+      if (!invoice) throw new NotFoundError("Invoice not found");
+    }
 
     const payment = await recordCustomerPayment({
       firmId,

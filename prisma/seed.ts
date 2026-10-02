@@ -2,10 +2,9 @@
  * Technic Technologies Electronics ERP — development seed.
  *
  * Builds the demo firm from the handover: one head office + one branch, the
- * full eight-role staff roster with 6-digit access codes, §62 electronics
- * categories and brands, products with variants / serials / IMEIs, demo
- * customers & suppliers, and both access codes
- * (TECH-GST-4821 / TECH-NONGST-9134) stored as bcrypt hashes.
+ * full staff roster with 6-digit access codes (900000 = GST-only
+ * reconciliation admin), §62 electronics categories and brands, products with
+ * variants / serials / IMEIs, and demo customers & suppliers.
  *
  * Safe to re-run: transactional tables are cleared first.
  */
@@ -36,11 +35,6 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) })
 
 const FIRM_ID = "firm_technic_main";
 const FY = "26-27";
-
-async function hash(text: string): Promise<string> {
-  const lib = await import("bcryptjs");
-  return lib.hash(text, 10);
-}
 
 // ---------------------------------------------------------------------------
 // Deterministic helpers
@@ -207,6 +201,7 @@ async function seedUsers(branchIds: { ho: string; br1: string }) {
     branchId: string;
   }[] = [
     { code: "EMP0001", name: "Arun Kumar (Super Admin)", email: "superadmin@technic.example", login: "900001", role: "PLATFORM_ADMIN", branchId: branchIds.ho },
+    { code: "EMP0000", name: "GST Reconciliation Admin", email: "gst.admin@technic.example", login: "900000", role: "ADMIN", branchId: branchIds.ho },
     { code: "EMP0002", name: "Deepa Rao", email: "admin@technic.example", login: "900002", role: "ADMIN", branchId: branchIds.ho },
     { code: "EMP0003", name: "Suresh Menon", email: "manager@technic.example", login: "900003", role: "MANAGER", branchId: branchIds.ho },
     { code: "EMP0004", name: "Rekha Pillai", email: "accountant@technic.example", login: "900004", role: "ACCOUNTANT", branchId: branchIds.ho },
@@ -229,34 +224,16 @@ async function seedUsers(branchIds: { ho: string; br1: string }) {
         role: def.role,
         branchId: def.branchId,
         status: "ACTIVE",
+        // The GST reconciliation admin (900000) gets the GST-only reporting
+        // view; every other user sees the full combined transaction stream.
+        accessView: def.login === "900000" ? "GST_ONLY" : "COMBINED",
       },
       select: { id: true, role: true, name: true },
     });
     users.push(user);
   }
-  console.log(`  ${users.length} users — logins 900001..900008`);
+  console.log(`  ${users.length} users — logins 900000..900008`);
   return users;
-}
-
-async function seedAccessCodes(createdById: string) {
-  const entries: { type: "GST" | "NON_GST"; plain: string; description: string }[] = [
-    { type: "GST", plain: "TECH-GST-4821", description: "Demo GST access code (handover §25)" },
-    { type: "NON_GST", plain: "TECH-NONGST-9134", description: "Demo non-GST access code (handover §25)" },
-  ];
-
-  for (const entry of entries) {
-    await prisma.accessCode.create({
-      data: {
-        firmId: FIRM_ID,
-        codeHash: await hash(entry.plain),
-        type: entry.type,
-        description: entry.description,
-        isActive: true,
-        createdById,
-      },
-    });
-  }
-  console.log(`  2 access codes: TECH-GST-4821 / TECH-NONGST-9134 (bcrypt-hashed)`);
 }
 
 async function seedCatalogue(branchIds: { ho: string; br1: string }) {
@@ -733,7 +710,7 @@ async function main() {
   const { headOffice, branch } = await seedFirm();
   const users = await seedUsers({ ho: headOffice.id, br1: branch.id });
   const admin = users.find((u) => u.role === "PLATFORM_ADMIN")!;
-  await seedAccessCodes(admin.id);
+
   await seedSettings();
   const products = await seedCatalogue({ ho: headOffice.id, br1: branch.id });
   await seedSuppliers();
@@ -749,19 +726,19 @@ async function main() {
   // payments); a small numbering gap is harmless, a collision is not.
   const setCounter = async (
     documentType: string,
-    accessMode: "GST" | "NON_GST",
+    taxMode: "GST" | "NON_GST",
     value: number,
   ) => {
     await prisma.documentSequence.upsert({
       where: {
-        firmId_documentType_accessMode_financialYear: {
+        firmId_documentType_taxMode_financialYear: {
           firmId: FIRM_ID,
           documentType,
-          accessMode,
+          taxMode,
           financialYear: FY,
         },
       },
-      create: { firmId: FIRM_ID, documentType, accessMode, financialYear: FY, value },
+      create: { firmId: FIRM_ID, documentType, taxMode, financialYear: FY, value },
       update: { value },
     });
   };

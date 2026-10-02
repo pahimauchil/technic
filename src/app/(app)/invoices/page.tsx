@@ -101,11 +101,7 @@ export default async function InvoicesPage({
     <div className="space-y-4">
       <PageHeader
         title="Invoices"
-        description={
-          user.accessMode === "GST"
-            ? "Tax invoices and bills issued by your firm"
-            : "Non-GST bills issued by your firm"
-        }
+        description="Tax invoices and bills issued by your firm"
         actions={
           <>
             {user.permissions.includes("reports.export") ? (

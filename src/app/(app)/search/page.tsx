@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { globalSearch } from "@/lib/services/search";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 
 export const metadata = { title: "Search — Technic Technologies" };
 
@@ -30,7 +30,10 @@ export default async function SearchPage({
   const params = await searchParams;
   const query = params.q?.trim() ?? "";
 
-  const hits = query.length >= 2 ? await globalSearch(user.activeFirmId, query, 30) : [];
+  const hits =
+    query.length >= 2
+      ? await globalSearch(user.activeFirmId, query, 30, taxModeWhere(user))
+      : [];
 
   return (
     <div className="space-y-4">

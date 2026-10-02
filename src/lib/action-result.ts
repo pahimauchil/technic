@@ -1,6 +1,13 @@
 import { z } from "zod";
-import { AccessModeError } from "@/lib/access-mode";
 import { AuthenticationError, AuthorizationError } from "@/lib/session";
+
+/** Thrown when an operation needs a tax context the session cannot provide. */
+export class AccessModeError extends Error {
+  constructor(message = "This operation requires GST access") {
+    super(message);
+    this.name = "AccessModeError";
+  }
+}
 
 export type FieldErrors = Record<string, string[]>;
 

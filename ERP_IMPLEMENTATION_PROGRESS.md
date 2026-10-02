@@ -286,3 +286,57 @@ while their own Receive goods button renders.
 - Stale `.next/types` errors after route deletion: `rm -rf .next/types`.
 - Neon pooler may transiently time out on `pg_advisory_lock` — retry works.
 - `code_search` (ripgrep) can fail with ENOENT on this machine — use bash grep.
+
+---
+
+## Review-and-fix pass (2026-10-01, uncommitted — pending user confirmation)
+
+### 1. Sidebar reorganized by usage frequency (nav-config.ts)
+- New order: Dashboard → SALES & BILLING (Invoices, Quotations, Sales Orders, Sales Returns, Payments, **POS last**) → PURCHASING → INVENTORY → PARTNERS → BUSINESS → ADMINISTRATION.
+- Renamed "Purchase Bills" → "Supplier Bills" (clearer); section renamed SALES → SALES & BILLING.
+
+### 2. Sales Orders: Create flow added (was missing entirely)
+- New `sales-orders/actions.ts` (`createSalesOrderAction`, permission `sales.create`) → existing `createSalesOrder` service.
+- New `sales-orders/new-button.tsx`: dialog with searchable customer/product pickers, editable qty/rate lines, expected-by date, notes.
+- Verified: TT/SO/26-27/0001 created (Zenith Infotech, ₹499, Confirmed), persisted server-side.
+
+### 3. Purchase Orders: distinct Create PO flow (receive-goods was the only action)
+- New `purchases/po-actions.ts` (`createPurchaseOrderAction`, permission `purchase.create`) → existing `createPurchaseOrder` service (was dead code).
+- New `purchases/new-po-button.tsx`; purchases page now shows "New purchase order" + "Receive goods".
+- Verified: TT/PO/26-27/0001 created (Ingram Micro, ₹6,200, Draft), persisted.
+- Receive-goods dialog relabeled: "Record goods received" / "Record receipt & bill" (it books GRN + bill; it never creates a PO).
+
+### 4. Product Edit + Deactivate/Reactivate (detail page had no actions)
+- New `products/[id]/edit-button.tsx` + `updateProductAction` (`products.edit`) and `toggleProductStatusAction` (`products.delete`) in products/actions.ts.
+- Update preserves attributes/variants/min-price/warranty type by re-applying existing rows; deleteProduct auto-deactivates when history exists.
+- Verified: price change 499→549→revert 499 persisted both ways; deactivate→INACTIVE persisted (history product); reactivate→ACTIVE; reactivate button only shows on inactive products.
+- Products list now: status filter (Active default / Deactivated / via `status` param) — previously deactivated products stayed visible.
+
+### 5. Searchable dropdowns (new `components/ui/searchable-select.tsx`, no new deps)
+- Keyboard-navigable filterable combobox (type-to-filter name/phone/SKU). Applied to: sales-order dialog (customer/product), new PO dialog (supplier/product), receive-goods dialog (supplier/product), quotation dialog (customer/product), POS customer picker, payments record dialog (customer).
+- `/api/products` now returns `gstRate` so quotation lines use the product's own rate (was hardcoded 18).
+
+### 6. Quotation form rebuilt (lines were read-only after add)
+- Editable quantity/rate per line with live total; searchable pickers; per-product GST rate.
+- Verified: TT/QT/26-27/0002 = 3 × ₹499 = ₹1,497 persisted (Arjun Patel, Draft).
+- Quotations list: status FilterBar was decorative (param ignored) — now filters DRAFT/SENT/ACCEPTED/REJECTED/CONVERTED (verified server-side).
+
+### 7. Verified as already correct (no changes)
+- Invoice stock updates: transactional SALE_OUT writes, pre-checks, serials stamped, warranty records created; cancel restores stock.
+- Quotation→invoice conversion: server-side duplicate guard (status CONVERTED rejected), quotation marked CONVERTED, audit entries.
+- Access-code mode switching: server-validated bcrypt codes, rate limiting + lockout, all attempts audited; invoice kind always derives from session mode.
+- RBAC guards on every page/action (`requirePermissionInFirm`/`authorize`).
+
+### 8. Verification matrix
+- `npm run typecheck` ✓ and `npm run build` ✓ (41 routes) after all changes.
+- Live (Super Admin 900001): SO create, PO create, product edit/deactivate/reactivate, quotation create, all searchable pickers, sidebar order (Invoices top, POS bottom).
+- Live (Viewer 900008): no New SO / New PO / Receive / Edit / Deactivate buttons; POS hidden in sidebar.
+- Live (Purchase Staff 900006): sees New PO + Receive goods; /sales-orders → /forbidden.
+- Transient `getaddrinfo EAI_AGAIN` to Neon during one page load — infra flake, recovered on retry, not a code issue.
+- Commit/push held for user confirmation (established workflow).
+
+### 9. PO ↔ goods receipt connected (follow-up, same day)
+- User asked why the purchases page had two buttons. Root cause: they were unrelated flows — a PO could never be received.
+- `receiveGoodsAction` now accepts `poId`; new [receive-po-button.tsx](src/app/(app)/purchases/receive-po-button.tsx) adds a per-row "Receive" button (hidden for RECEIVED/CANCELLED orders and for users without purchase.receive).
+- Dialog pre-fills outstanding qty (ordered − received) at PO prices; supports partial receipts; serial-tracked lines prompt for serials.
+- Verified live on TT/PO/26-27/0001: GRN + supplier bill TT/PI/26-27/0001 booked, PO status → RECEIVED, Receive button disappeared, Air Fryer stock 10 → 11, typecheck + build ✓.

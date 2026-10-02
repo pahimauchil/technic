@@ -2,9 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 
-import { runAction, BusinessRuleError } from "@/lib/action-result";
+import { runAction, BusinessRuleError, AccessModeError } from "@/lib/action-result";
 import { authorize, requireFirmId } from "@/lib/session";
-import { sessionAccessMode } from "@/lib/access-mode";
+import { canBillGst } from "@/lib/access-mode";
 import { createInvoice, type SaleLineInput } from "@/lib/services/sales";
 
 export interface CheckoutInput {
@@ -21,18 +21,25 @@ export interface CheckoutInput {
   paymentAmount?: number;
   paymentMethod?: "CASH" | "UPI" | "CARD" | "BANK_TRANSFER" | "CHEQUE" | "OTHER";
   notes?: string;
+  /** Requested tax treatment. Only users with GST billing permission may
+   *  request "GST"; everyone else is always billed non-GST. */
+  taxMode?: "GST" | "NON_GST";
 }
 
 /**
- * The access-mode gate for billing. The client never chooses the invoice kind:
- * the mode comes from the server session, and requesting a GST sale while the
- * session is NON_GST is rejected here with 403-equivalent semantics.
+ * Billing gate. The client may request the tax treatment, but it is only
+ * honoured when the server confirms the user holds the GST billing permission
+ * (gst_reports.view) — never trusted on its own.
  */
 export async function checkoutAction(input: CheckoutInput) {
   return runAction(async () => {
     const user = await authorize("invoice.create");
     const firmId = requireFirmId(user);
-    const mode = sessionAccessMode(user);
+    const requested = input.taxMode === "GST";
+    if (requested && !canBillGst(user)) {
+      throw new AccessModeError("GST billing requires the GST reporting permission.");
+    }
+    const mode = requested ? "GST" : "NON_GST";
 
     if (input.lines.length === 0) {
       throw new BusinessRuleError("Add at least one item before checkout");

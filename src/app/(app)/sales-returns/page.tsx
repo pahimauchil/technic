@@ -4,7 +4,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ApproveReturnButton } from "./approve-button";
 import { prisma } from "@/lib/prisma";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { SALES_RETURN_STATUS_LABELS } from "@/lib/workflow";
@@ -15,7 +15,7 @@ export default async function SalesReturnsPage() {
   const user = await requirePermissionInFirm("sales.view");
 
   const returns = await prisma.salesReturn.findMany({
-    where: { firmId: user.activeFirmId },
+    where: { firmId: user.activeFirmId, invoice: taxModeWhere(user) },
     orderBy: { createdAt: "desc" },
     take: 100,
     include: {

@@ -5,10 +5,12 @@ import { revalidatePath } from "next/cache";
 import { runAction } from "@/lib/action-result";
 import { authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
 import { receiveGoods } from "@/lib/services/purchases";
-import { sessionAccessMode } from "@/lib/access-mode";
+import { firmDefaultMode } from "@/lib/access-mode";
 
 export async function receiveGoodsAction(input: {
   supplierId: string;
+  /** When receiving against a purchase order, its id — drives PO progress. */
+  poId?: string | null;
   supplierRef?: string | null;
   paymentAmount?: number;
   lines: {
@@ -27,8 +29,9 @@ export async function receiveGoodsAction(input: {
       firmId,
       branchId,
       supplierId: input.supplierId,
+      poId: input.poId ?? null,
       supplierRef: input.supplierRef ?? null,
-      taxMode: sessionAccessMode(user),
+      taxMode: await firmDefaultMode(firmId),
       paymentAmount: input.paymentAmount,
       lines: input.lines.map((line) => ({ ...line, gstRate: 18 })),
       userId: user.id,

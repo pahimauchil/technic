@@ -27,7 +27,6 @@ export async function enterFirmAction(input: { firmId: string }) {
     await unstable_update({
       activeFirmId: firm.id,
       activeFirmName: firm.name,
-      accessMode: "NON_GST",
     } as never);
 
     revalidatePath("/", "layout");

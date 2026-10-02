@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -16,14 +17,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+
 import { Textarea } from "@/components/ui/textarea";
+import {
+  SearchableSelect,
+  type SearchableOption,
+} from "@/components/ui/searchable-select";
 import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
 import { receiveGoodsAction } from "./actions";
 
@@ -75,6 +74,16 @@ export function NewPurchaseButton() {
 
   const productById = useMemo(() => new Map(products.map((p) => [p.id, p])), [products]);
 
+  const supplierOptions: SearchableOption[] = suppliers.map((supplier) => ({
+    value: supplier.id,
+    label: supplier.name,
+  }));
+  const productOptions: SearchableOption[] = products.map((product) => ({
+    value: product.id,
+    label: product.name,
+    hint: `${product.sku} · cost ₹${product.purchasePrice.toFixed(0)}`,
+  }));
+
   const setLine = (key: number, updates: Partial<Line>) =>
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...updates } : line)));
 
@@ -114,23 +123,26 @@ export function NewPurchaseButton() {
   return (
     <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (next) void loadOptions(); }}>
       <DialogTrigger asChild>
-        <Button><Truck /> Receive goods</Button>
+        <Button variant="outline"><Truck /> Receive goods (no PO)</Button>
       </DialogTrigger>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Receive goods &amp; book supplier bill</DialogTitle>
+          <DialogTitle>Record goods received</DialogTitle>
+          <DialogDescription>
+            Books the stock and the supplier bill now — serials are registered for tracked products.
+          </DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>Supplier *</Label>
-            <Select value={supplierId} onValueChange={setSupplierId}>
-              <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
-              <SelectContent>
-                {suppliers.map((supplier) => (
-                  <SelectItem key={supplier.id} value={supplier.id}>{supplier.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              ariaLabel="Supplier"
+              options={supplierOptions}
+              value={supplierId}
+              onValueChange={setSupplierId}
+              placeholder="Search supplier…"
+              emptyMessage="No suppliers match"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="sup-ref">Supplier bill no.</Label>
@@ -144,22 +156,18 @@ export function NewPurchaseButton() {
             return (
               <div key={line.key} className="space-y-1.5 rounded-lg border border-border p-2.5">
                 <div className="flex items-center gap-2">
-                  <Select
+                  <SearchableSelect
+                    ariaLabel="Product"
+                    className="flex-1"
+                    options={productOptions}
                     value={line.productId}
                     onValueChange={(value) => {
                       const next = productById.get(value);
                       setLine(line.key, { productId: value, unitPrice: String(next?.purchasePrice ?? 0) });
                     }}
-                  >
-                    <SelectTrigger className="flex-1"><SelectValue placeholder="Product" /></SelectTrigger>
-                    <SelectContent>
-                      {products.map((option) => (
-                        <SelectItem key={option.id} value={option.id}>
-                          {option.name} ({option.sku})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    placeholder="Search product…"
+                    emptyMessage="No products match"
+                  />
                   <Input
                     className="w-20 numeric" type="number" min="1" value={line.quantity}
                     onChange={(e) => setLine(line.key, { quantity: e.target.value })}
@@ -192,18 +200,16 @@ export function NewPurchaseButton() {
             );
           })}
           <Button size="sm" variant="outline" onClick={addLine}><Plus /> Add item</Button>
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="po-pay">Payment now (₹, optional)</Label>
-          <Input id="po-pay" className="numeric w-40" type="number" min="0" value={paymentAmount}
-            onChange={(e) => setPaymentAmount(e.target.value)} />
-        </div>
+        </div>          <div className="space-y-1.5">
+            <Label htmlFor="po-pay">Paid to supplier now (₹, optional)</Label>
+            <Input id="po-pay" className="numeric w-40" type="number" min="0" value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)} />
+          </div>
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>Cancel</Button>
           <Button onClick={submit} disabled={pending || !supplierId || lines.every((l) => !l.productId)}>
-            {pending ? "Receiving…" : "Receive & book bill"}
+            {pending ? "Saving…" : "Record receipt & bill"}
           </Button>
         </DialogFooter>
       </DialogContent>

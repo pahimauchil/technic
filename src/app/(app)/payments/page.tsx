@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RecordPaymentButton } from "./record-button";
 import { prisma } from "@/lib/prisma";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { num } from "@/lib/money";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
@@ -19,7 +19,15 @@ export default async function PaymentsPage() {
 
   const [payments, receivables, refunds] = await Promise.all([
     prisma.payment.findMany({
-      where: { firmId: user.activeFirmId },
+      where: {
+        firmId: user.activeFirmId,
+        OR: [
+          { invoice: taxModeWhere(user) },
+          { purchaseInvoice: taxModeWhere(user) },
+          { isAdvance: true },
+          { salesReturn: { invoice: taxModeWhere(user) } },
+        ],
+      },
       orderBy: { paidAt: "desc" },
       take: 100,
       include: {
@@ -33,7 +41,16 @@ export default async function PaymentsPage() {
       _sum: { outstandingAmount: true },
     }),
     prisma.payment.aggregate({
-      where: { firmId: user.activeFirmId, direction: "REFUND_OUT" },
+      where: {
+        firmId: user.activeFirmId,
+        direction: "REFUND_OUT",
+        OR: [
+          { invoice: taxModeWhere(user) },
+          { purchaseInvoice: taxModeWhere(user) },
+          { isAdvance: true },
+          { salesReturn: { invoice: taxModeWhere(user) } },
+        ],
+      },
       _sum: { amount: true },
     }),
   ]);

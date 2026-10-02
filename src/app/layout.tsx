@@ -11,7 +11,7 @@ export const metadata: Metadata = {
     template: "%s · Technic Technologies ERP",
   },
   description:
-    "Technic Technologies Electronics ERP — products, inventory, serial & IMEI tracking, GST and non-GST billing, purchases, payments and reports.",
+    "Technic Technologies Electronics ERP — products, inventory, serial & IMEI tracking, billing, purchases, payments and reports.",
 };
 
 export const viewport: Viewport = {

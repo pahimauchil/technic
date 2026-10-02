@@ -38,6 +38,7 @@ export async function GET(request: Request) {
         purchasePrice: true,
         sellingPrice: true,
         trackSerials: true,
+        gstRate: true,
       },
       orderBy: { name: "asc" },
       take: 100,

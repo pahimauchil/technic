@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/session";
-import { resolveBranchScope, requireFirmId } from "@/lib/session";
+import { resolveBranchScope, requireFirmId, taxModeWhere } from "@/lib/session";
 import { num } from "@/lib/money";
 import type { Prisma } from "@/generated/prisma/client";
 
@@ -26,6 +26,7 @@ export async function listInvoices(user: SessionUser, filters: InvoiceFilters) {
 
   const where: Prisma.InvoiceWhereInput = {
     firmId,
+    ...taxModeWhere(user),
     ...(scope.branchId ? { branchId: scope.branchId } : {}),
     ...(filters.status && filters.status !== "all" ? { status: filters.status as never } : {}),
     ...(filters.kind === "GST" ? { kind: "TAX_INVOICE" } : {}),

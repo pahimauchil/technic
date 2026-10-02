@@ -346,7 +346,7 @@ export const PERMISSION_DESCRIPTIONS: Record<string, string> = {
   [P.WARRANTY_CLAIM]: "Register warranty claims",
   [P.REPORTS_VIEW]: "Open the reports module",
   [P.REPORTS_EXPORT]: "Export reports and data as CSV",
-  [P.GST_REPORTS_VIEW]: "View GST reports (GST mode only)",
+  [P.GST_REPORTS_VIEW]: "View GST reports",
   [P.USERS_VIEW]: "View user accounts",
   [P.USERS_MANAGE]: "Create and manage users",
   [P.ROLES_MANAGE]: "Change role permissions and user overrides",

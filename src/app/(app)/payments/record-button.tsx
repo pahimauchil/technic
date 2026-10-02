@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { recordPaymentAction } from "./actions";
 
 interface CustomerOption {
@@ -47,6 +48,12 @@ export function RecordPaymentButton() {
       .then((data) => setCustomers(data.customers ?? []))
       .catch(() => setCustomers([]));
   };
+
+  const customerOptions: SearchableOption[] = customers.map((customer) => ({
+    value: customer.id,
+    label: customer.name,
+    hint: customer.phone,
+  }));
 
   const submit = () => {
     startTransition(async () => {
@@ -86,18 +93,14 @@ export function RecordPaymentButton() {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="pay-customer">Customer</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger id="pay-customer">
-                <SelectValue placeholder="Select customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((customer) => (
-                  <SelectItem key={customer.id} value={customer.id}>
-                    {customer.name} · {customer.phone}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              ariaLabel="Customer"
+              options={customerOptions}
+              value={customerId}
+              onValueChange={setCustomerId}
+              placeholder="Search customer by name or phone…"
+              emptyMessage="No customers match"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="pay-amount">Amount (₹)</Label>

@@ -116,7 +116,7 @@ export async function GET(request: Request) {
         );
       }
       case "gst-summary": {
-        if (!hasPermission(user, PERMISSIONS.GST_REPORTS_VIEW) || user.accessMode !== "GST") {
+        if (!hasPermission(user, PERMISSIONS.GST_REPORTS_VIEW)) {
           return NextResponse.json(
             { error: "GST reports require GST access mode" },
             { status: 403 },

@@ -16,7 +16,7 @@ import {
   type ReportPreset,
 } from "@/lib/services/reports";
 import { requirePermissionInFirm } from "@/lib/session";
-import { sessionAccessMode } from "@/lib/access-mode";
+import { canBillGst } from "@/lib/access-mode";
 import { formatCurrency, num } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { Lock } from "lucide-react";
@@ -32,14 +32,14 @@ export default async function ReportsPage({
   const params = await searchParams;
   const preset = (params.preset ?? "this_month") as ReportPreset;
   const options = { preset, from: params.from, to: params.to };
-  const mode = sessionAccessMode(user);
+  const gstReports = canBillGst(user);
 
   const [sales, purchases, products, financial, gst] = await Promise.all([
     salesReport(user, options),
     purchaseReport(user, options),
     productSalesReport(user, options),
     financialSummary(user, options),
-    mode === "GST" ? gstSummaryReport(user, options) : Promise.resolve(null),
+    gstReports ? gstSummaryReport(user, options) : Promise.resolve(null),
   ]);
 
   const exportQs = new URLSearchParams({ preset, ...(params.from ? { from: params.from } : {}), ...(params.to ? { to: params.to } : {}) });
@@ -121,7 +121,7 @@ export default async function ReportsPage({
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center justify-between text-base">
               GST summary
-              {mode === "GST" ? (
+              {gstReports ? (
                 <Badge tone="info">{num(gst?.totals.cgst ?? 0) + num(gst?.totals.sgst ?? 0) + num(gst?.totals.igst ?? 0) > 0 ? "Tax collected" : "No tax"}</Badge>
               ) : (
                 <Badge tone="neutral"><Lock className="mr-1 size-3" /> GST mode required</Badge>
@@ -129,9 +129,9 @@ export default async function ReportsPage({
             </CardTitle>
           </CardHeader>
           <CardContent className="px-0">
-            {mode !== "GST" || !gst ? (
+            {!gstReports || !gst ? (
               <p className="px-4 py-8 text-center text-sm text-muted-foreground">
-                Switch to GST mode with a GST access code to view GST summaries.
+                GST summaries require the GST reporting permission.
               </p>
             ) : (
               <Table>

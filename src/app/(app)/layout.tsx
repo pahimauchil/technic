@@ -15,7 +15,6 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         branchName: user.branchName,
         firmName: user.activeFirmName ?? user.firmName,
         permissions: user.permissions,
-        accessMode: user.accessMode,
       }}
     >
       {children}

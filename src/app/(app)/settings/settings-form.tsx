@@ -15,7 +15,7 @@ const FIELDS: { key: string; label: string; textarea?: boolean }[] = [
   { key: "company_email", label: "Email" },
   { key: "company_website", label: "Website" },
   { key: "sequence_invoice_gst", label: "GST invoice prefix ({FY} = financial year)" },
-  { key: "sequence_invoice_non_gst", label: "Non-GST bill prefix" },
+  { key: "sequence_invoice_non_gst", label: "Bill prefix" },
   { key: "company_bank_details", label: "Bank details (printed on invoices)", textarea: true },
   { key: "document_terms", label: "Default terms & conditions", textarea: true },
   { key: "document_footer_text", label: "Document footer", textarea: true },

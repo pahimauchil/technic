@@ -73,7 +73,8 @@ Sign in with any seeded staff code, then pick the firm and enter the shop.
 
 | Role | Code |
 |------|------|
-| Super Admin | `900001` |
+| Super Admin (full view) | `900001` |
+| GST Reconciliation Admin (GST-only view) | `900000` |
 | Manager | `900002` |
 | Accountant | `900003` |
 | Sales Staff | `900004` |
@@ -84,7 +85,7 @@ Sign in with any seeded staff code, then pick the firm and enter the shop.
 
 > **Change or delete these demo codes before going live** (Administration → Users).
 
-GST / Non-GST mode access codes are shown once on creation and can be rotated in **Administration → Access Codes**.
+The **GST Reconciliation Admin** (`900000`) operates in a GST-only reporting view: non-GST transactions are filtered out of every screen, search, report and export for that user. All other roles see the complete transaction stream. The view is a property of the user record and can be changed by a Super Admin.
 
 ## Production Checklist
 

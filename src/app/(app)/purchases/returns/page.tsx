@@ -2,9 +2,10 @@ import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
 import { prisma } from "@/lib/prisma";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
+import { NewPurchaseReturnButton } from "./new-button";
 
 export const metadata = { title: "Purchase Returns — Technic Technologies" };
 
@@ -12,7 +13,7 @@ export default async function PurchaseReturnsPage() {
   const user = await requirePermissionInFirm("purchase.view");
 
   const returns = await prisma.purchaseReturn.findMany({
-    where: { firmId: user.activeFirmId },
+    where: { firmId: user.activeFirmId, ...taxModeWhere(user) },
     orderBy: { returnedAt: "desc" },
     take: 100,
     include: { supplier: { select: { name: true } } },
@@ -45,7 +46,11 @@ export default async function PurchaseReturnsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Purchase Returns" description="Goods sent back to suppliers — stock reduced, payable adjusted" />
+      <PageHeader
+        title="Purchase Returns"
+        description="Goods sent back to suppliers — stock reduced, payable adjusted"
+        actions={user.permissions.includes("purchase.create") ? <NewPurchaseReturnButton /> : null}
+      />
       <DataTable
         columns={columns}
         rows={rows}

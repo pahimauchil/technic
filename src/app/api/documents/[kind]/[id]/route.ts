@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getCurrentUser, hasPermission } from "@/lib/session";
+import { getCurrentUser, hasPermission, taxModeWhere } from "@/lib/session";
 import { PERMISSIONS } from "@/lib/rbac";
 import { errorStatus, NotFoundError } from "@/lib/action-result";
 import {
@@ -37,7 +37,10 @@ export async function GET(
         if (!hasPermission(user, PERMISSIONS.INVOICE_VIEW)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-        const invoice = await prisma.invoice.findFirst({ where: { id, firmId: user.activeFirmId }, select: { id: true } });
+        const invoice = await prisma.invoice.findFirst({
+          where: { id, firmId: user.activeFirmId, ...taxModeWhere(user) },
+          select: { id: true },
+        });
         if (!invoice) throw new NotFoundError("Invoice not found");
         result = await generateInvoicePDF(invoice.id);
         break;
@@ -46,7 +49,10 @@ export async function GET(
         if (!hasPermission(user, PERMISSIONS.QUOTATION_VIEW)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-        const quotation = await prisma.quotation.findFirst({ where: { id, firmId: user.activeFirmId }, select: { id: true } });
+        const quotation = await prisma.quotation.findFirst({
+          where: { id, firmId: user.activeFirmId, ...taxModeWhere(user) },
+          select: { id: true },
+        });
         if (!quotation) throw new NotFoundError("Quotation not found");
         result = await generateQuotationPDF(quotation.id);
         break;
@@ -55,7 +61,10 @@ export async function GET(
         if (!hasPermission(user, PERMISSIONS.PURCHASE_VIEW)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-        const po = await prisma.purchaseOrder.findFirst({ where: { id, firmId: user.activeFirmId }, select: { id: true } });
+        const po = await prisma.purchaseOrder.findFirst({
+          where: { id, firmId: user.activeFirmId, ...taxModeWhere(user) },
+          select: { id: true },
+        });
         if (!po) throw new NotFoundError("Purchase order not found");
         result = await generatePurchaseOrderPDF(po.id);
         break;
@@ -64,7 +73,10 @@ export async function GET(
         if (!hasPermission(user, PERMISSIONS.PURCHASE_VIEW)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-        const bill = await prisma.purchaseInvoice.findFirst({ where: { id, firmId: user.activeFirmId }, select: { id: true } });
+        const bill = await prisma.purchaseInvoice.findFirst({
+          where: { id, firmId: user.activeFirmId, ...taxModeWhere(user) },
+          select: { id: true },
+        });
         if (!bill) throw new NotFoundError("Purchase bill not found");
         result = await generatePurchaseInvoicePDF(bill.id);
         break;
@@ -73,7 +85,19 @@ export async function GET(
         if (!hasPermission(user, PERMISSIONS.PAYMENTS_VIEW)) {
           return NextResponse.json({ error: "Forbidden" }, { status: 403 });
         }
-        const payment = await prisma.payment.findFirst({ where: { id, firmId: user.activeFirmId }, select: { id: true } });
+        const payment = await prisma.payment.findFirst({
+          where: {
+            id,
+            firmId: user.activeFirmId,
+            OR: [
+              { invoice: taxModeWhere(user) },
+              { purchaseInvoice: taxModeWhere(user) },
+              { isAdvance: true },
+              { salesReturn: { invoice: taxModeWhere(user) } },
+            ],
+          },
+          select: { id: true },
+        });
         if (!payment) throw new NotFoundError("Receipt not found");
         result = await generatePaymentReceiptPDF(payment.id);
         break;

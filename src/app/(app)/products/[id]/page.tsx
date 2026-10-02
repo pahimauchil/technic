@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { EditProductButton } from "./edit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { prisma } from "@/lib/prisma";
@@ -56,11 +57,35 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
         title={product.name}
         description={`${product.sku}${product.brand ? ` · ${product.brand.name}` : ""}${product.category ? ` · ${product.category.name}` : ""}`}
         actions={
-          <StatusBadge
-            status={product.status}
-            label={product.status === "ACTIVE" ? "Active" : "Inactive"}
-            tone={product.status === "ACTIVE" ? "success" : "neutral"}
-          />
+          <>
+            <StatusBadge
+              status={product.status}
+              label={product.status === "ACTIVE" ? "Active" : "Inactive"}
+              tone={product.status === "ACTIVE" ? "success" : "neutral"}
+            />
+            {user.permissions.includes("products.edit") || user.permissions.includes("products.delete") ? (
+              <EditProductButton
+                canDelete={user.permissions.includes("products.delete")}
+                product={{
+                  id: product.id,
+                  name: product.name,
+                  sku: product.sku,
+                  barcode: product.barcode,
+                  hsnCode: product.hsnCode,
+                  gstRate: Number(product.gstRate),
+                  purchasePrice: Number(product.purchasePrice),
+                  sellingPrice: Number(product.sellingPrice),
+                  mrp: Number(product.mrp),
+                  warrantyMonths: product.warrantyMonths,
+                  lowStockQty: product.lowStockQty,
+                  trackSerials: product.trackSerials,
+                  trackImei: product.trackImei,
+                  description: product.description,
+                  status: product.status,
+                }}
+              />
+            ) : null}
+          </>
         }
       />
 

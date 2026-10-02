@@ -39,9 +39,11 @@ export interface NavSection {
 }
 
 /**
- * Technic Technologies ERP navigation, following the handover's sidebar order:
- * Dashboard → Sales → Purchases → Inventory → Partners → Money → Warranty →
- * Reports → Administration.
+ * Technic Technologies ERP navigation, ordered by how often each module is
+ * used day to day: billing documents first (Invoices, Quotations), then
+ * purchases, inventory, partners, money matters, and finally POS — a
+ * dedicated full-screen terminal that works best as a deliberate switch —
+ * and administration last.
  */
 export const NAV_SECTIONS: NavSection[] = [
   {
@@ -56,14 +58,8 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    label: "SALES",
+    label: "SALES & BILLING",
     items: [
-      {
-        label: "Point of Sale",
-        href: "/pos",
-        icon: MonitorSmartphone,
-        permissions: [PERMISSIONS.SALES_CREATE, PERMISSIONS.INVOICE_CREATE],
-      },
       {
         label: "Invoices",
         href: "/invoices",
@@ -94,10 +90,16 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: Wallet,
         permissions: [PERMISSIONS.PAYMENTS_VIEW],
       },
+      {
+        label: "Point of Sale",
+        href: "/pos",
+        icon: MonitorSmartphone,
+        permissions: [PERMISSIONS.SALES_CREATE, PERMISSIONS.INVOICE_CREATE],
+      },
     ],
   },
   {
-    label: "PURCHASES",
+    label: "PURCHASING",
     items: [
       {
         label: "Purchase Orders",
@@ -106,7 +108,7 @@ export const NAV_SECTIONS: NavSection[] = [
         permissions: [PERMISSIONS.PURCHASE_VIEW],
       },
       {
-        label: "Purchase Bills",
+        label: "Supplier Bills",
         href: "/purchases/bills",
         icon: FileText,
         permissions: [PERMISSIONS.PURCHASE_VIEW],
@@ -214,12 +216,6 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/firms",
         icon: Settings,
         permissions: [PERMISSIONS.FIRMS_VIEW],
-      },
-      {
-        label: "Access Codes",
-        href: "/access-codes",
-        icon: BadgePercent,
-        permissions: [PERMISSIONS.ACCESS_CODES_MANAGE],
       },
       {
         label: "Settings",

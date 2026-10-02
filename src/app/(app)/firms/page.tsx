@@ -46,7 +46,7 @@ export default async function FirmsPage() {
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <p className="text-muted-foreground">{firm.legalName ?? firm.name}</p>
-              {firm.gstin ? <p className="font-mono text-xs">GSTIN {firm.gstin}</p> : <p className="text-xs text-warning">No GSTIN — non-GST billing only</p>}
+              {firm.gstin ? <p className="font-mono text-xs">GSTIN {firm.gstin}</p> : <p className="text-xs text-warning">No GSTIN</p>}
               <p className="text-xs text-muted-foreground">
                 {firm.city}, {firm.state} · FY {firm.financialYear}
               </p>

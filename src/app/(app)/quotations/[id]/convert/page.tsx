@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { ConvertForm } from "./convert-form";
 import { prisma } from "@/lib/prisma";
 import { requirePermissionInFirm } from "@/lib/session";
-import { sessionAccessMode } from "@/lib/access-mode";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 
@@ -26,13 +25,11 @@ export default async function ConvertQuotationPage({ params }: { params: Promise
   });
   if (!quotation) notFound();
 
-  const mode = sessionAccessMode(user);
-
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <PageHeader
         title={`Convert ${quotation.quotationNumber}`}
-        description={`${quotation.customer.name} · ${formatDate(quotation.quotationDate)} — will be billed as a ${mode === "GST" ? "Tax Invoice" : "Non-GST bill"}`}
+        description={`${quotation.customer.name} · ${formatDate(quotation.quotationDate)}`}
       />
 
       <Card>
@@ -63,8 +60,8 @@ export default async function ConvertQuotationPage({ params }: { params: Promise
             <span className="numeric">{formatCurrency(quotation.totalAmount)}</span>
           </div>
           <div className="px-4 pt-2">
-            <Badge tone={mode === "GST" ? "info" : "neutral"}>
-              Billing in {mode === "GST" ? "GST" : "non-GST"} mode
+            <Badge tone={quotation.taxMode === "GST" ? "info" : "neutral"}>
+              {quotation.taxMode === "GST" ? "Tax Invoice" : "Bill"}
             </Badge>
           </div>
         </CardContent>

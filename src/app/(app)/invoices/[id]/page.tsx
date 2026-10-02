@@ -12,7 +12,7 @@ import { CancelInvoiceButton } from "./cancel-invoice-button";
 import { RecordInvoicePaymentButton } from "./record-payment-button";
 import { SalesReturnButton } from "./sales-return-button";
 import { getInvoiceForView } from "@/lib/services/sales";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/workflow";
@@ -26,7 +26,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   let invoice;
   try {
-    invoice = await getInvoiceForView(user.activeFirmId, id);
+    invoice = await getInvoiceForView(user.activeFirmId, id, { ...taxModeWhere(user) });
   } catch (error) {
     if (error instanceof NotFoundError) notFound();
     throw error;
@@ -47,7 +47,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     <div className="space-y-4">
       <PageHeader
         title={invoice.invoiceNumber}
-        description={`${isTaxInvoice ? "Tax Invoice" : "Non-GST Bill"} · ${formatDate(invoice.invoiceDate)}`}
+        description={`${isTaxInvoice ? "Tax Invoice" : "Bill"} · ${formatDate(invoice.invoiceDate)}`}
         actions={
           <>
             <Button asChild variant="outline">
@@ -80,7 +80,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         <StatusBadge status={invoice.status} label={INVOICE_STATUS_LABELS[invoice.status] ?? invoice.status} dot />
         <StatusBadge
           status={invoice.taxMode}
-          label={invoice.taxMode === "GST" ? "GST mode" : "Non-GST mode"}
+          label={invoice.taxMode === "GST" ? "GST mode" : "Bill"}
           tone={invoice.taxMode === "GST" ? "info" : "neutral"}
         />
         {invoice.status === "CANCELLED" && invoice.cancellationReason ? (

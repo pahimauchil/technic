@@ -14,7 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { prisma } from "@/lib/prisma";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { INVOICE_STATUS_LABELS } from "@/lib/workflow";
@@ -36,6 +36,7 @@ export default async function CustomerDetailPage({
       invoices: {
         orderBy: { invoiceDate: "desc" },
         take: 25,
+        where: taxModeWhere(user),
         select: {
           id: true,
           invoiceNumber: true,

@@ -3,11 +3,12 @@ import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { prisma } from "@/lib/prisma";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { num } from "@/lib/money";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { PURCHASE_INVOICE_STATUS_LABELS } from "@/lib/workflow";
+import { PaySupplierButton } from "./pay-button";
 
 export const metadata = { title: "Purchase Bills — Technic Technologies" };
 
@@ -15,7 +16,7 @@ export default async function PurchaseBillsPage() {
   const user = await requirePermissionInFirm("purchase.view");
 
   const bills = await prisma.purchaseInvoice.findMany({
-    where: { firmId: user.activeFirmId },
+    where: { firmId: user.activeFirmId, ...taxModeWhere(user) },
     orderBy: { invoiceDate: "desc" },
     take: 100,
     include: { supplier: { select: { name: true } } },
@@ -67,7 +68,11 @@ export default async function PurchaseBillsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="Purchase Bills" description="Supplier bills booked at goods receipt" />
+      <PageHeader
+        title="Purchase Bills"
+        description="Supplier bills booked at goods receipt"
+        actions={user.permissions.includes("payments.create") ? <PaySupplierButton /> : null}
+      />
       <DataTable
         columns={columns}
         rows={rows}
