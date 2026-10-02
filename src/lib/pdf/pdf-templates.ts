@@ -15,7 +15,7 @@ import {
 /**
  * Technic Technologies document templates. One generator per business
  * document, all assembled from the shared PDFDocumentBuilder blocks:
- *  - Tax Invoice (GST) / Non-GST Bill, keyed on invoice.kind
+ *  - Tax Invoice / Bill, keyed on invoice.kind
  *  - Quotation
  *  - Purchase Order
  *  - Purchase Invoice (supplier bill)
@@ -52,9 +52,11 @@ function branchProfile(branch: {
   };
 }
 
-function serialSuffix(serialNumbers: string | null): string {
+function serialSuffix(serialNumbers: string[] | string | null): string {
   if (!serialNumbers) return "";
-  const serials = serialNumbers.split("\n").filter(Boolean);
+  const serials = Array.isArray(serialNumbers)
+    ? serialNumbers.filter(Boolean)
+    : serialNumbers.split("\n").filter(Boolean);
   if (serials.length === 0) return "";
   return `\nSN: ${serials.join(", ")}`;
 }
@@ -64,12 +66,12 @@ type Numericish = number | string | { toNumber: () => number };
 interface LineLike {
   description: string;
   hsnCode?: string | null;
-  serialNumbers?: string | null;
-  quantity: number;
+  serialNumbers?: string[] | string | null;
+  quantity: Numericish;
   unitPrice: Numericish;
-  discountPercent?: Numericish | null;
-  gstRate?: Numericish | null;
-  taxableValue?: Numericish | null;
+  discountPercent?: Numericish;
+  gstRate?: Numericish;
+  taxableValue?: Numericish;
   cgstAmount?: Numericish | null;
   sgstAmount?: Numericish | null;
   igstAmount?: Numericish | null;
@@ -85,20 +87,23 @@ interface TaxTotals {
 
 /**
  * The line-items table. GST documents expose taxable value + CGST/SGST/IGST
- * columns per the tax-invoice format; NON-GST bills omit the tax columns.
+ * columns per the tax-invoice format; bills omit the tax columns.
  */
 function invoiceTableRows(lines: LineLike[], withTaxColumns: boolean) {
   let totalQty = 0;
   const rows: PDFTableRow[] = lines.map((line, idx) => {
-    totalQty += num(line.quantity);
+    const qty = typeof line.quantity === "number" ? line.quantity : (typeof line.quantity === "string" ? Number(line.quantity) : line.quantity.toNumber());
+    totalQty += qty;
     const serials = serialSuffix(line.serialNumbers ?? null);
-    const rate = formatCurrency(num(line.unitPrice as number));
-    const amount = formatCurrency(num(line.lineTotal as number));
+    const unitPrice = typeof line.unitPrice === "number" ? line.unitPrice : (typeof line.unitPrice === "string" ? Number(line.unitPrice) : line.unitPrice.toNumber());
+    const lineTotal = typeof line.lineTotal === "number" ? line.lineTotal : (typeof line.lineTotal === "string" ? Number(line.lineTotal) : line.lineTotal.toNumber());
+    const rate = formatCurrency(unitPrice);
+    const amount = formatCurrency(lineTotal);
     const base: PDFTableRow = {
       sl: idx + 1,
       item: `${line.description}${serials}`,
       hsn: line.hsnCode || "—",
-      qty: num(line.quantity),
+      qty,
       rate,
       amount,
     };
@@ -201,7 +206,7 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
             `vs Inter-state (IGST)`,
             `Supplier: ${company.name}`,
           ]
-        : [`Non-GST bill — no tax charged`, `Supplier: ${company.name}`],
+        : [`Supplier: ${company.name}`],
     },
   ]);
 

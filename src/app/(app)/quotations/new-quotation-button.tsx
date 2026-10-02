@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText } from "lucide-react";
+import { FileText, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -19,12 +19,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  SearchableSelect,
+  type SearchableOption,
+} from "@/components/ui/searchable-select";
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatCurrency } from "@/lib/money";
+import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
 import { createQuotationAction } from "./actions";
 
 interface ProductOption {
@@ -32,6 +38,8 @@ interface ProductOption {
   name: string;
   sku: string;
   sellingPrice: number;
+  gstRate: number;
+  trackSerials: boolean;
 }
 
 interface CustomerOption {
@@ -40,54 +48,71 @@ interface CustomerOption {
   phone: string;
 }
 
-interface LineDraft {
+interface Line {
+  key: number;
   productId: string;
-  name: string;
-  quantity: number;
-  unitPrice: number;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  quantity: string;
+  /** Raw input text — kept as a string so the field can be cleared while editing. */
+  unitPrice: string;
+  trackSerials: boolean;
+  serials: string[];
 }
 
-export function NewQuotationButton({ taxMode }: { taxMode: "GST" | "NON_GST" }) {
+let lineKey = 0;
+
+export function NewQuotationButton({ 
+  taxMode: initialTaxMode, 
+  canSwitchMode 
+}: { 
+  taxMode: "GST" | "NON_GST"; 
+  canSwitchMode: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
+  const [taxMode, setTaxMode] = useState<"GST" | "NON_GST">(initialTaxMode);
   const [customers, setCustomers] = useState<CustomerOption[]>([]);
   const [products, setProducts] = useState<ProductOption[]>([]);
   const [customerId, setCustomerId] = useState("");
-  const [productId, setProductId] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([]);
+  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
-    if (!open) return;
-    fetch("/api/customers")
-      .then((r) => (r.ok ? r.json() : { customers: [] }))
-      .then((d) => setCustomers(d.customers ?? []))
-      .catch(() => setCustomers([]));
-    fetch("/api/products")
-      .then((r) => (r.ok ? r.json() : { products: [] }))
-      .then((d) => setProducts(d.products ?? []))
-      .catch(() => setProducts([]));
-  }, [open]);
+    if (!open || customers.length > 0) return;
+    Promise.all([
+      fetch("/api/customers").then((r) => (r.ok ? r.json() : { customers: [] })),
+      fetch("/api/products").then((r) => (r.ok ? r.json() : { products: [] })),
+    ])
+      .then(([customersRes, productsRes]) => {
+        setCustomers(customersRes.customers ?? []);
+        setProducts(productsRes.products ?? []);
+      })
+      .catch(() => {
+        setCustomers([]);
+        setProducts([]);
+      });
+  }, [open, customers.length]);
 
-  const addLine = () => {
-    const product = products.find((p) => p.id === productId);
-    if (!product) return;
-    setLines((prev) => {
-      const existing = prev.find((l) => l.productId === product.id);
-      if (existing) {
-        return prev.map((l) =>
-          l.productId === product.id ? { ...l, quantity: l.quantity + 1 } : l,
-        );
-      }
-      return [
-        ...prev,
-        { productId: product.id, name: product.name, quantity: 1, unitPrice: product.sellingPrice },
-      ];
-    });
-    setProductId("");
-  };
+  const productById = new Map(products.map((p) => [p.id, p]));
+
+  const customerOptions: SearchableOption[] = customers.map((customer) => ({
+    value: customer.id,
+    label: customer.name,
+    hint: customer.phone,
+  }));
+  const productOptions: SearchableOption[] = products.map((product) => ({
+    value: product.id,
+    label: product.name,
+    hint: `${product.sku} · ${formatCurrency(product.sellingPrice)}`,
+  }));
+
+  const setLine = (key: number, updates: Partial<Line>) =>
+    setLines((current) => current.map((line) => (line.key === key ? { ...line, ...updates } : line)));
+
+  const addLine = () =>
+    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
 
   const submit = () => {
     startTransition(async () => {
@@ -96,19 +121,26 @@ export function NewQuotationButton({ taxMode }: { taxMode: "GST" | "NON_GST" }) 
         taxMode,
         validUntil: validUntil || null,
         notes: notes || null,
-        lines: lines.map((l) => ({
-          productId: l.productId,
-          quantity: l.quantity,
-          unitPrice: l.unitPrice,
-          gstRate: 18,
-        })),
+        lines: lines
+          .filter((line) => line.productId)
+          .map((line) => {
+            const product = productById.get(line.productId);
+            return {
+              productId: line.productId,
+              quantity: parseNumericInput(line.quantity),
+              unitPrice: parseNumericInput(line.unitPrice),
+              gstRate: product?.gstRate ?? 18,
+              serialNumbers: line.trackSerials ? line.serials : undefined,
+            };
+          }),
       });
       if (result.ok) {
         toast.success(`Quotation ${result.data.quotationNumber} created`);
         setOpen(false);
-        setLines([]);
-        setNotes("");
+        setLines([{ key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
+        setCustomerId("");
         setValidUntil("");
+        setNotes("");
         router.refresh();
       } else {
         toast.error(result.error);
@@ -116,7 +148,11 @@ export function NewQuotationButton({ taxMode }: { taxMode: "GST" | "NON_GST" }) 
     });
   };
 
-  const total = lines.reduce((sum, l) => sum + l.quantity * l.unitPrice, 0);
+  const validLines = lines.filter((line) => line.productId);
+  const total = validLines.reduce(
+    (sum, line) => sum + parseNumericInput(line.quantity) * parseNumericInput(line.unitPrice),
+    0,
+  );
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -125,7 +161,7 @@ export function NewQuotationButton({ taxMode }: { taxMode: "GST" | "NON_GST" }) 
           <FileText /> New quotation
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-h-[85vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create quotation</DialogTitle>
           <DialogDescription>
@@ -134,57 +170,133 @@ export function NewQuotationButton({ taxMode }: { taxMode: "GST" | "NON_GST" }) 
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Customer</Label>
-            <Select value={customerId} onValueChange={setCustomerId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name} · {c.phone}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label>Customer *</Label>
+            <SearchableSelect
+              ariaLabel="Customer"
+              options={customerOptions}
+              value={customerId}
+              onValueChange={setCustomerId}
+              placeholder="Search customer by name or phone…"
+              emptyMessage="No customers match"
+            />
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Items</Label>
-            <div className="flex gap-2">
-              <Select value={productId} onValueChange={setProductId}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Choose a product to add" />
+          {canSwitchMode && (
+            <div className="flex items-center justify-between">
+              <Label>Quotation type</Label>
+              <Select value={taxMode} onValueChange={(value: "GST" | "NON_GST") => setTaxMode(value)}>
+                <SelectTrigger className="h-8 w-32">
+                  <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name} · ₹{p.sellingPrice.toFixed(0)}
-                    </SelectItem>
-                  ))}
+                  <SelectItem value="GST">Tax Invoice</SelectItem>
+                  <SelectItem value="NON_GST">Bill</SelectItem>
                 </SelectContent>
               </Select>
-              <Button type="button" variant="outline" onClick={addLine}>
-                Add
-              </Button>
             </div>
-            {lines.length > 0 ? (
-              <div className="space-y-1 rounded-lg border border-border p-2 text-sm">
-                {lines.map((l) => (
-                  <div key={l.productId} className="flex items-center justify-between gap-2">
-                    <span className="truncate">{l.name}</span>
-                    <span className="numeric whitespace-nowrap">
-                      ₹{l.unitPrice.toFixed(2)} × {l.quantity}
+          )}
+
+          <div className="space-y-2">
+            <Label>Items *</Label>
+            {lines.map((line) => {
+              const product = productById.get(line.productId);
+              return (
+                <div key={line.key} className="space-y-1.5 rounded-lg border border-border p-2.5">
+                  <div className="flex items-center gap-2">
+                    <SearchableSelect
+                      ariaLabel="Product"
+                      className="flex-1"
+                      options={productOptions}
+                      value={line.productId}
+                      onValueChange={(value) => {
+                        const product = productById.get(value);
+                        setLine(line.key, {
+                          productId: value,
+                          unitPrice: String(product?.sellingPrice ?? 0),
+                          trackSerials: product?.trackSerials ?? false,
+                          serials: product?.trackSerials ? Array.from({ length: parseNumericInput(line.quantity) }, () => "") : [],
+                        });
+                      }}
+                      placeholder="Search product…"
+                      emptyMessage="No products match"
+                    />
+                    <Button
+                      size="icon-sm"
+                      variant="ghost"
+                      className="text-destructive"
+                      onClick={() => setLines((current) => current.filter((l) => l.key !== line.key))}
+                      aria-label="Remove line"
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-24">
+                      <Label className="text-xs text-muted-foreground">Quantity</Label>
+                      <Input
+                        className="numeric h-8"
+                        type="number"
+                        min="1"
+                        value={line.quantity}
+                        onChange={(e) => setLine(line.key, { quantity: e.target.value })}
+                        onBlur={(e) => {
+                          const newQty = tidyQuantityOnBlur(e.target.value);
+                          const newSerials = line.trackSerials
+                            ? [...line.serials, ...Array.from({ length: Math.max(0, parseNumericInput(newQty) - line.serials.length) }, () => "")].slice(0, parseNumericInput(newQty))
+                            : [];
+                          setLine(line.key, { quantity: newQty, serials: newSerials });
+                        }}
+                        aria-label="Quantity"
+                      />
+                    </div>
+                    <div className="w-32">
+                      <Label className="text-xs text-muted-foreground">Rate (₹)</Label>
+                      <Input
+                        className="numeric h-8"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={line.unitPrice}
+                        onChange={(e) => setLine(line.key, { unitPrice: e.target.value })}
+                        onBlur={(e) => setLine(line.key, { unitPrice: tidyAmountOnBlur(e.target.value) })}
+                        aria-label="Rate"
+                      />
+                    </div>
+                    <span className="numeric ml-auto pt-5 text-sm font-semibold">
+                      {formatCurrency(parseNumericInput(line.quantity) * parseNumericInput(line.unitPrice))}
                     </span>
                   </div>
-                ))}
-                <div className="flex justify-between border-t border-border pt-1 font-medium">
-                  <span>Total (before tax break-up)</span>
-                  <span className="numeric">₹{total.toFixed(2)}</span>
+                  {line.trackSerials ? (
+                    <div className="space-y-1.5">
+                      {Array.from({ length: parseNumericInput(line.quantity) }, (_, index) => (
+                        <Input
+                          key={index}
+                          className="h-8 font-mono text-xs"
+                          placeholder={`Serial / IMEI ${index + 1}`}
+                          value={line.serials[index] ?? ""}
+                          onChange={(e) =>
+                            setLine(line.key, {
+                              serials: line.serials.map((s, i) => (i === index ? e.target.value : s)),
+                            })
+                          }
+                        />
+                      ))}
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            ) : null}
+              );
+            })}
+            <Button size="sm" variant="outline" onClick={addLine}>
+              <Plus /> Add item
+            </Button>
           </div>
+
+          {validLines.length > 0 ? (
+            <div className="flex justify-between rounded-lg bg-muted px-3 py-2 text-sm font-medium">
+              <span>Quotation total</span>
+              <span className="numeric">{formatCurrency(total)}</span>
+            </div>
+          ) : null}
 
           <div className="space-y-1.5">
             <Label htmlFor="quote-valid">Valid until (optional)</Label>
@@ -211,7 +323,7 @@ export function NewQuotationButton({ taxMode }: { taxMode: "GST" | "NON_GST" }) 
           <Button variant="outline" onClick={() => setOpen(false)} disabled={pending}>
             Cancel
           </Button>
-          <Button onClick={submit} disabled={pending || !customerId || lines.length === 0}>
+          <Button onClick={submit} disabled={pending || !customerId || validLines.length === 0}>
             {pending ? "Saving…" : "Create quotation"}
           </Button>
         </DialogFooter>

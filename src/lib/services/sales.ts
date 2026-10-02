@@ -139,6 +139,7 @@ export async function createQuotation(input: QuotationInput) {
             discountPercent: line.discountPercent ?? 0,
             gstRate: input.taxMode === "GST" ? (line.gstRate ?? 0) : 0,
             lineTotal: summary.lines[index].lineTotal,
+            serialNumbers: line.serialNumbers,
           })),
         },
       },
@@ -649,9 +650,13 @@ export async function cancelInvoice(
   });
 }
 
-export async function getInvoiceForView(firmId: string, invoiceId: string) {
+export async function getInvoiceForView(
+  firmId: string,
+  invoiceId: string,
+  options: { taxMode?: TaxMode } = {},
+) {
   const invoice = await prisma.invoice.findFirst({
-    where: { id: invoiceId, firmId },
+    where: { id: invoiceId, firmId, ...(options.taxMode ? { taxMode: options.taxMode } : {}) },
     include: {
       customer: true,
       branch: true,
@@ -704,6 +709,7 @@ export async function convertQuotationToInvoice(
       unitPrice: Number(line.unitPrice),
       discountPercent: Number(line.discountPercent),
       gstRate: Number(line.gstRate),
+      serialNumbers: line.serialNumbers,
     })),
   });
 }

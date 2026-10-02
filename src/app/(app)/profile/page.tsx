@@ -57,20 +57,20 @@ export default async function ProfilePage() {
 
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Access mode</CardTitle>
+          <CardTitle className="text-base">Reporting view</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 text-sm">
           <div className="flex justify-between py-1">
-            <span className="text-muted-foreground">Current billing mode</span>
+            <span className="text-muted-foreground">Transaction view</span>
             <StatusBadge
-              status={user.accessMode ?? "NON_GST"}
-              label={user.accessMode === "GST" ? "GST — tax invoices" : "Non-GST — retail bills"}
-              tone={user.accessMode === "GST" ? "info" : "neutral"}
+              status={user.accessView ?? "COMBINED"}
+              label={user.accessView === "GST_ONLY" ? "Reconciliation view" : "Full view"}
+              tone={user.accessView === "GST_ONLY" ? "info" : "neutral"}
             />
           </div>
           <p className="pt-1 text-xs text-muted-foreground">
-            Switch modes from the {user.accessMode === "GST" ? "Non-GST" : "GST"} button in the
-            top bar. Each mode keeps its own invoice numbering.
+            Your view is set by a Super Admin on your user record. It controls which
+            transactions you see; it never changes how sales are billed or recorded.
           </p>
         </CardContent>
       </Card>

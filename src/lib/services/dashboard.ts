@@ -2,22 +2,19 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import type { SessionUser } from "@/lib/session";
-import { resolveBranchScope, requireFirmId } from "@/lib/session";
-import type { TaxMode } from "@/generated/prisma/enums";
+import { resolveBranchScope, requireFirmId, taxModeWhere } from "@/lib/session";
 import { num } from "@/lib/money";
 import { todayRange } from "@/lib/dates";
 import { financialYearFor } from "@/lib/sequence";
 
 /**
- * Dashboard metrics — mode-aware per the handover: GST widgets (GST sales,
- * GST summary) are computed only in GST mode and the UI renders them only
- * there. All figures are firm- and branch-scoped from the session.
+ * Dashboard metrics — role-aware and scoped to the user's firm and branch.
+ * All figures are firm- and branch-scoped from the session.
  */
 
 export interface DashboardMetrics {
   todaySales: number;
   todaySalesCount: number;
-  todayGstSales: number | null; // null in NON_GST mode
   todayPurchases: number;
   receivables: number;
   payables: number;
@@ -41,23 +38,23 @@ export interface DashboardMetrics {
 
 export async function dashboardMetrics(
   user: SessionUser,
-  mode: TaxMode,
 ): Promise<DashboardMetrics> {
   const firmId = requireFirmId(user);
   const scope = resolveBranchScope(user, null);
   const branchWhere = scope.branchId ? { branchId: scope.branchId } : {};
+  const tm = taxModeWhere(user);
   const today = todayRange();
   const monthStart = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
 
   const [todaySalesAgg, todayPurchasesAgg, receivablesAgg, payablesAgg, lowStockCount, outOfStockCount, monthExpensesAgg, monthPurchasesAgg] =
     await Promise.all([
       prisma.invoice.aggregate({
-        where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: today.from, lte: today.to }, ...branchWhere },
+        where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: today.from, lte: today.to }, ...branchWhere, ...tm },
         _sum: { totalAmount: true },
         _count: { _all: true },
       }),
       prisma.purchaseInvoice.aggregate({
-        where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: today.from, lte: today.to }, ...branchWhere },
+        where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: today.from, lte: today.to }, ...branchWhere, ...tm },
         _sum: { total: true },
       }),
       prisma.customer.aggregate({ where: { firmId }, _sum: { outstandingAmount: true } }),
@@ -73,26 +70,10 @@ export async function dashboardMetrics(
         _sum: { amount: true },
       }),
       prisma.purchaseInvoice.aggregate({
-        where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: monthStart }, ...branchWhere },
+        where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: monthStart }, ...branchWhere, ...tm },
         _sum: { total: true },
       }),
     ]);
-
-  // Today's GST-only sales (GST mode widget).
-  let todayGstSales: number | null = null;
-  if (mode === "GST") {
-    const gstAgg = await prisma.invoice.aggregate({
-      where: {
-        firmId,
-        taxMode: "GST",
-        status: { not: "CANCELLED" },
-        invoiceDate: { gte: today.from, lte: today.to },
-        ...branchWhere,
-      },
-      _sum: { totalAmount: true },
-    });
-    todayGstSales = num(gstAgg._sum.totalAmount);
-  }
 
   // 30-day sales + purchase series for the graphs.
   const since = new Date();
@@ -102,12 +83,12 @@ export async function dashboardMetrics(
   const [salesRows, purchaseRows] = await Promise.all([
     prisma.invoice.groupBy({
       by: ["invoiceDate"],
-      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: since }, ...branchWhere },
+      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: since }, ...branchWhere, ...tm },
       _sum: { totalAmount: true },
     }),
     prisma.purchaseInvoice.groupBy({
       by: ["invoiceDate"],
-      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: since }, ...branchWhere },
+      where: { firmId, status: { not: "CANCELLED" }, invoiceDate: { gte: since }, ...branchWhere, ...tm },
       _sum: { total: true },
     }),
   ]);
@@ -137,7 +118,7 @@ export async function dashboardMetrics(
   }
 
   const recentInvoices = await prisma.invoice.findMany({
-    where: { firmId, ...branchWhere },
+    where: { firmId, ...branchWhere, ...tm },
     orderBy: { invoiceDate: "desc" },
     take: 8,
     select: {
@@ -160,6 +141,7 @@ export async function dashboardMetrics(
         status: { not: "CANCELLED" },
         invoiceDate: { gte: monthStart },
         ...(scope.branchId ? { branchId: scope.branchId } : {}),
+        ...tm,
       },
     },
     include: { product: { select: { name: true } } },
@@ -176,15 +158,11 @@ export async function dashboardMetrics(
   const outOfStock = outOfStockCount.filter((row) => (row._sum.quantity ?? 0) <= 0).length;
   const expensesThisMonth = num(monthExpensesAgg._sum.amount);
   const revenueThisMonth = salesSeries.reduce((sum, day) => sum + day.sales, 0);
-  const profitThisMonth =
-    mode === "GST"
-      ? revenueThisMonth - num(monthPurchasesAgg._sum.total) - expensesThisMonth
-      : null;
+  const profitThisMonth = revenueThisMonth - num(monthPurchasesAgg._sum.total) - expensesThisMonth;
 
   return {
     todaySales: num(todaySalesAgg._sum.totalAmount),
     todaySalesCount: todaySalesAgg._count._all,
-    todayGstSales,
     todayPurchases: num(todayPurchasesAgg._sum.total),
     receivables: num(receivablesAgg._sum.outstandingAmount),
     payables: num(payablesAgg._sum.outstandingAmount),

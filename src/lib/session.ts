@@ -4,7 +4,9 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { isGlobalRole, isPlatformRole, type PermissionCode } from "@/lib/rbac";
+import type { AccessView } from "@/types/next-auth";
 import type { TaxMode, UserRole } from "@/generated/prisma/enums";
+import type { Prisma } from "@/generated/prisma/client";
 
 export interface SessionUser {
   id: string;
@@ -28,8 +30,13 @@ export interface SessionUser {
    */
   activeFirmId: string | null;
   activeFirmName: string | null;
-  /** The operational tax mode for this session: GST or NON_GST. */
-  accessMode: TaxMode;
+  /**
+   * Which transaction stream this session may see: COMBINED (both tax
+   * invoices and bills — the default, and the full view for the
+   * Super Admin) or GST_ONLY (an internal GST-reconciliation view; only
+   * GST transactions are visible). Enforced on every backend read path.
+   */
+  accessView: AccessView;
 }
 
 export class AuthorizationError extends Error {
@@ -74,7 +81,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     firmName: session.user.firmName ?? null,
     activeFirmId: session.user.activeFirmId ?? null,
     activeFirmName: session.user.activeFirmName ?? null,
-    accessMode: (session.user.accessMode as TaxMode) === "GST" ? "GST" : "NON_GST",
+    accessView: session.user.accessView === "GST_ONLY" ? "GST_ONLY" : "COMBINED",
   };
 }
 
@@ -117,6 +124,18 @@ export async function authorize(
   if (!user) throw new AuthenticationError();
   if (!hasPermission(user, permission)) throw new AuthorizationError();
   return user;
+}
+
+/**
+ * The Prisma `taxMode` filter implied by the session's view stream. In the
+ * COMBINED view it is undefined (no filtering — both transaction kinds);
+ * in the GST_ONLY view it restricts every tax-mode-aware query to GST
+ * records. Reads it from the session — never from request data.
+ */
+export function taxModeWhere(
+  user: Pick<SessionUser, "accessView">,
+): { taxMode?: TaxMode } {
+  return user.accessView === "GST_ONLY" ? { taxMode: "GST" as const } : {};
 }
 
 /**

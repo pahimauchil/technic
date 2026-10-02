@@ -127,7 +127,7 @@ export interface SummaryLine {
 
 /**
  * Shared PDFKit document-assembly system for every Technic Technologies
- * business document (Tax Invoice, Non-GST Bill, Quotation, Purchase Order,
+ * business document (Tax Invoice, Bill, Quotation, Purchase Order,
  * Payment Receipt). One component per visual block (header, title, info
  * columns, items table, financial summary, signature) so each template
  * configures the same building blocks.

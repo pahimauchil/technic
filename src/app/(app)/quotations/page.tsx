@@ -8,7 +8,9 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
-import { requirePermissionInFirm } from "@/lib/session";
+import { requirePermissionInFirm, taxModeWhere, type SessionUser } from "@/lib/session";
+import { canBillGst } from "@/lib/access-mode";
+import { isPlatformRole } from "@/lib/rbac";
 import { NewQuotationButton } from "./new-quotation-button";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
@@ -16,11 +18,30 @@ import { QUOTATION_STATUS_LABELS } from "@/lib/workflow";
 
 export const metadata = { title: "Quotations — Technic Technologies" };
 
-export default async function QuotationsPage() {
+function quotationMode(user: SessionUser): "GST" | "NON_GST" {
+  return user.permissions.includes("gst_reports.view") ? "GST" : "NON_GST";
+}
+
+export default async function QuotationsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | undefined>>;
+}) {
   const user = await requirePermissionInFirm("quotation.view");
+  const params = await searchParams;
+
+  const QUOTATION_STATUSES = ["DRAFT", "SENT", "ACCEPTED", "REJECTED", "EXPIRED", "CONVERTED"] as const;
+  type QuotationStatusValue = (typeof QUOTATION_STATUSES)[number];
+  const status = QUOTATION_STATUSES.includes(params.status as QuotationStatusValue)
+    ? (params.status as QuotationStatusValue)
+    : undefined;
 
   const quotations = await prisma.quotation.findMany({
-    where: { firmId: user.activeFirmId },
+    where: {
+      firmId: user.activeFirmId,
+      ...(status ? { status } : {}),
+      ...taxModeWhere(user),
+    },
     orderBy: { quotationDate: "desc" },
     take: 100,
     include: {
@@ -70,7 +91,7 @@ export default async function QuotationsPage() {
       key: "mode",
       header: "Mode",
       hideOnMobile: true,
-      cell: (row) => <Badge tone={row.taxMode === "GST" ? "info" : "neutral"}>{row.taxMode === "GST" ? "GST" : "Non-GST"}</Badge>,
+      cell: (row) => <Badge tone={row.taxMode === "GST" ? "info" : "neutral"}>{row.taxMode === "GST" ? "GST" : "Bill"}</Badge>,
     },
     {
       key: "status",
@@ -89,13 +110,14 @@ export default async function QuotationsPage() {
   ];
 
   const canCreate = user.permissions.includes("quotation.create");
+  const canSwitchMode = isPlatformRole(user.role);
 
   return (
     <div className="space-y-4">
       <PageHeader
         title="Quotations"
         description="Estimates you can convert to invoices in one step"
-        actions={canCreate ? <NewQuotationButton taxMode={user.accessMode ?? "NON_GST"} /> : null}
+        actions={canCreate ? <NewQuotationButton taxMode={quotationMode(user)} canSwitchMode={canSwitchMode} /> : null}
       />
 
       <FilterBar
@@ -108,6 +130,8 @@ export default async function QuotationsPage() {
               { value: "DRAFT", label: "Draft" },
               { value: "SENT", label: "Sent" },
               { value: "ACCEPTED", label: "Accepted" },
+              { value: "REJECTED", label: "Rejected" },
+              { value: "EXPIRED", label: "Expired" },
               { value: "CONVERTED", label: "Converted" },
             ],
           },

@@ -2,7 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+
 import { Barcode, Minus, Plus, ScanLine, Search, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { Separator } from "@/components/ui/separator";
 import { checkoutAction } from "./actions";
 import { formatCurrency } from "@/lib/money";
@@ -54,7 +55,7 @@ interface CartLine {
 }
 
 export function PosTerminal({
-  mode,
+  mode: initialMode,
   products,
   customers,
   canCollectPayment,
@@ -68,6 +69,7 @@ export function PosTerminal({
   canSwitchMode: boolean;
 }) {
   const router = useRouter();
+  const [mode, setMode] = useState<"GST" | "NON_GST">(initialMode);
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
@@ -116,6 +118,12 @@ export function PosTerminal({
       ];
     });
   };
+
+  const customerOptions: SearchableOption[] = customers.map((customer) => ({
+    value: customer.id,
+    label: customer.name,
+    hint: customer.phone,
+  }));
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -171,6 +179,7 @@ export function PosTerminal({
         })),
         paymentAmount: canCollectPayment ? Number(paymentAmount) || undefined : undefined,
         paymentMethod: paymentMethod as never,
+        taxMode: mode,
       });
       if (result.ok) {
         toast.success(`Invoice ${result.data.invoiceNumber} created`);
@@ -250,18 +259,14 @@ export function PosTerminal({
       <Card className="lg:col-span-3">
         <CardHeader className="pb-2">
           <CardTitle className="text-base">Current sale</CardTitle>
-          <Select value={customerId} onValueChange={setCustomerId}>
-            <SelectTrigger aria-label="Customer">
-              <SelectValue placeholder="Select customer" />
-            </SelectTrigger>
-            <SelectContent>
-              {customers.map((customer) => (
-                <SelectItem key={customer.id} value={customer.id}>
-                  {customer.name} · {customer.phone}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchableSelect
+            ariaLabel="Customer"
+            options={customerOptions}
+            value={customerId}
+            onValueChange={setCustomerId}
+            placeholder="Search customer by name or phone…"
+            emptyMessage="No customers match"
+          />
         </CardHeader>
         <CardContent className="space-y-3">
           {cart.length === 0 ? (
@@ -397,6 +402,20 @@ export function PosTerminal({
 
           {cart.length > 0 ? (
             <>
+              {canSwitchMode && (
+                <div className="flex items-center justify-between py-2">
+                  <span className="text-sm text-muted-foreground">Invoice type</span>
+                  <Select value={mode} onValueChange={(value: "GST" | "NON_GST") => setMode(value)}>
+                    <SelectTrigger className="h-8 w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GST">Tax Invoice</SelectItem>
+                      <SelectItem value="NON_GST">Bill</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
               <Separator />
               <div className="space-y-1 text-sm">
                 <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="numeric">{formatCurrency(totals.subtotal)}</span></div>
@@ -407,7 +426,7 @@ export function PosTerminal({
                     <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="numeric">{formatCurrency(totals.sgst)}</span></div>
                   </>
                 ) : (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="numeric">Non-GST bill</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="numeric">Bill</span></div>
                 )}
                 {totals.roundOff !== 0 ? (
                   <div className="flex justify-between"><span className="text-muted-foreground">Round off</span><span className="numeric">{formatCurrency(totals.roundOff)}</span></div>
@@ -449,12 +468,7 @@ export function PosTerminal({
                 {pending ? "Billing…" : `Charge ${formatCurrency(totals.total)}`}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Invoice will be a {mode === "GST" ? "Tax Invoice" : "Non-GST bill"}
-                {canSwitchMode ? (
-                  <>
-                    {" "}— <Link href="/access-codes" className="underline">switch mode</Link> to change
-                  </>
-                ) : null}
+                Invoice will be a {mode === "GST" ? "Tax Invoice" : "Bill"}
               </p>
             </>
           ) : null}

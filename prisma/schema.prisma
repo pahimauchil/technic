@@ -56,6 +56,14 @@ enum TaxMode {
   NON_GST
 }
 
+/// The reporting view a user operates in. COMBINED sees every transaction;
+/// GST_ONLY is the internal GST-reconciliation view and filters non-GST rows
+/// out of every backend query. It never changes what is stored or audited.
+enum AccessView {
+  COMBINED
+  GST_ONLY
+}
+
 enum CustomerType {
   RETAIL
   BUSINESS
@@ -402,6 +410,8 @@ model User {
   status       UserStatus @default(ACTIVE)
   branchId     String?
   branch       Branch?    @relation(fields: [branchId], references: [id], onDelete: SetNull)
+  /// Reporting view for this user (see AccessView). Defaults to the full view.
+  accessView   AccessView @default(COMBINED)
 
   image       String?
   lastLoginAt DateTime?
@@ -575,14 +585,16 @@ model DocumentSequence {
   firmId        String
   firm          Firm    @relation(fields: [firmId], references: [id], onDelete: Cascade)
   documentType  String // invoice | quotation | sales_order | purchase_order | purchase_invoice | sales_return | purchase_return | payment | credit_note | debit_note | stock_transfer | expense | customer | supplier
-  accessMode    TaxMode @default(NON_GST)
+  /// Tax sequence the counter belongs to. Column remains "accessMode" so
+  /// existing sequence rows and numbering history are untouched.
+  taxMode       TaxMode @default(NON_GST) @map("accessMode")
   financialYear String  @default("26-27")
   prefix        String?
   value         Int     @default(0)
 
   updatedAt DateTime @updatedAt
 
-  @@unique([firmId, documentType, accessMode, financialYear])
+  @@unique([firmId, documentType, taxMode, financialYear])
   @@index([firmId])
   @@map("document_sequences")
 }
@@ -1091,6 +1103,7 @@ model QuotationLine {
   discountPercent Decimal         @default(0) @db.Decimal(5, 2)
   gstRate         Decimal         @default(0) @db.Decimal(5, 2)
   lineTotal       Decimal         @db.Decimal(12, 2)
+  serialNumbers   String[]
 
   @@index([quotationId])
   @@map("quotation_lines")

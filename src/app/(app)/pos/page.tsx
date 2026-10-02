@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/shared/page-header";
 import { requirePermissionInFirm } from "@/lib/session";
-import { sessionAccessMode } from "@/lib/access-mode";
+import { canBillGst } from "@/lib/access-mode";
+import { isPlatformRole } from "@/lib/rbac";
 import { PosTerminal } from "./pos-terminal";
 
 export const metadata = { title: "Point of Sale — Technic Technologies" };
@@ -9,7 +10,8 @@ export const metadata = { title: "Point of Sale — Technic Technologies" };
 export default async function PosPage() {
   const user = await requirePermissionInFirm(["invoice.create", "sales.create"]);
   const firmId = user.activeFirmId;
-  const mode = sessionAccessMode(user);
+  const mode = canBillGst(user) ? "GST" : "NON_GST";
+  const canSwitchMode = isPlatformRole(user.role);
 
   const [products, customers] = await Promise.all([
     prisma.product.findMany({
@@ -45,11 +47,12 @@ export default async function PosPage() {
     <div className="space-y-4">
       <PageHeader
         title="Point of Sale"
-        description={`Billing in ${mode === "GST" ? "GST" : "non-GST"} mode — scan a barcode or search the catalogue`}
+        description="Scan a barcode or search the catalogue to create a sale"
       />
       <PosTerminal
         mode={mode}
         branchId={user.branchId ?? ""}
+        canSwitchMode={canSwitchMode}
         products={products.map((product) => ({
           id: product.id,
           name: product.name,
@@ -70,7 +73,6 @@ export default async function PosPage() {
         }))}
         customers={customers}
         canCollectPayment={user.permissions.includes("payments.create")}
-        canSwitchMode={user.permissions.includes("access_codes.manage") || user.role === "PLATFORM_ADMIN"}
       />
     </div>
   );

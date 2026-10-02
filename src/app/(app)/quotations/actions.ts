@@ -17,6 +17,7 @@ export async function createQuotationAction(input: {
     quantity: number;
     unitPrice: number;
     gstRate?: number;
+    serialNumbers?: string[];
   }[];
 }) {
   return runAction(async () => {
