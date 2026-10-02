@@ -267,7 +267,7 @@ export interface InvoiceInput {
 /**
  * Creates an invoice. In GST mode this is a Tax Invoice (CGST/SGST or IGST
  * from seller state vs place of supply); in NON_GST mode every tax field stays
- * zero and the document is a plain Bill. Stock moves and serials are stamped
+ * zero and the document is a plain Non-Tax Invoice. Stock moves and serials are stamped
  * in the same transaction.
  */
 export async function createInvoice(input: InvoiceInput) {
@@ -513,7 +513,7 @@ export async function createInvoice(input: InvoiceInput) {
       action: "INVOICE_CREATED",
       entity: "Invoice",
       entityId: invoice.id,
-      summary: `${invoiceNumber} (${input.taxMode === "GST" ? "Tax Invoice" : "Bill"})`,
+      summary: `${invoiceNumber} (${input.taxMode === "GST" ? "Tax Invoice" : "Non-Tax Invoice"})`,
       firmId: input.firmId,
       branchId: input.branchId,
       userId: input.userId,
@@ -674,6 +674,53 @@ export async function getInvoiceForView(
   });
   if (!invoice) throw new NotFoundError("Invoice not found");
   return invoice;
+}
+
+export async function getQuotationForView(
+  firmId: string,
+  quotationId: string,
+  options: { taxMode?: TaxMode } = {},
+) {
+  const quotation = await prisma.quotation.findFirst({
+    where: { id: quotationId, firmId, ...(options.taxMode ? { taxMode: options.taxMode } : {}) },
+    include: {
+      customer: true,
+      branch: true,
+      lines: {
+        include: {
+          product: { select: { name: true, sku: true, hsnCode: true } },
+          variant: { select: { name: true, sku: true } },
+        },
+      },
+      createdBy: { select: { name: true } },
+    },
+  });
+  if (!quotation) throw new NotFoundError("Quotation not found");
+  return quotation;
+}
+
+export async function getSalesOrderForView(
+  firmId: string,
+  orderId: string,
+  options: { taxMode?: TaxMode } = {},
+) {
+  const order = await prisma.salesOrder.findFirst({
+    where: { id: orderId, firmId, ...(options.taxMode ? { taxMode: options.taxMode } : {}) },
+    include: {
+      customer: true,
+      branch: true,
+      lines: {
+        include: {
+          product: { select: { name: true, sku: true, hsnCode: true } },
+          variant: { select: { name: true, sku: true } },
+        },
+      },
+      createdBy: { select: { name: true } },
+      quotation: { select: { quotationNumber: true } },
+    },
+  });
+  if (!order) throw new NotFoundError("Sales order not found");
+  return order;
 }
 
 /** Quote → invoice conversion using the quotation's own lines. */

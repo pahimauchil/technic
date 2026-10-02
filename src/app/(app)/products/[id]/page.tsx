@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { EditProductButton } from "./edit-button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -56,6 +58,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
       <PageHeader
         title={product.name}
         description={`${product.sku}${product.brand ? ` · ${product.brand.name}` : ""}${product.category ? ` · ${product.category.name}` : ""}`}
+        backButton={<Button asChild variant="ghost" size="sm"><Link href="/products"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link></Button>}
         actions={
           <>
             <StatusBadge

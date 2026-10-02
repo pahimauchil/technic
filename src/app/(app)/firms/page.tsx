@@ -3,6 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EnterFirmButton } from "./enter-button";
+import { CreateFirmButton } from "./create-button";
+import { EditFirmButton } from "./edit-button";
+import { DeleteFirmButton } from "./delete-button";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/session";
 import { isPlatformRole } from "@/lib/rbac";
@@ -13,8 +16,11 @@ export const metadata = { title: "Firms — Technic Technologies" };
 export default async function FirmsPage() {
   const user = await requirePermission("firms.view");
   const platformAdmin = isPlatformRole(user.role);
+  const isAdmin = user.role === "ADMIN";
+  const canManageFirms = user.permissions.includes("firms.manage" as const);
+  const canSwitchFirms = platformAdmin || isAdmin || canManageFirms;
 
-  const firms = platformAdmin
+  const firms = canSwitchFirms
     ? await prisma.firm.findMany({
         orderBy: { name: "asc" },
         include: { _count: { select: { users: true, branches: true, products: true } } },
@@ -29,10 +35,11 @@ export default async function FirmsPage() {
       <PageHeader
         title="Firms"
         description={
-          platformAdmin
+          canSwitchFirms
             ? "Select a firm to operate in — its data, users and access modes"
             : "Your firm's registration profile"
         }
+        actions={canManageFirms ? <CreateFirmButton /> : null}
       />
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -55,13 +62,21 @@ export default async function FirmsPage() {
               </p>
               <div className="flex items-center justify-between pt-1">
                 <span className="text-xs text-muted-foreground">Created {formatDate(firm.createdAt)}</span>
-                {platformAdmin ? (
-                  user.activeFirmId === firm.id ? (
-                    <Badge tone="success">Operating here</Badge>
-                  ) : (
-                    <EnterFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} disabled={firm.status !== "ACTIVE"} />
-                  )
-                ) : null}
+                <div className="flex items-center gap-2">
+                  {canSwitchFirms ? (
+                    user.activeFirmId === firm.id ? (
+                      <Badge tone="success">Operating here</Badge>
+                    ) : (
+                      <EnterFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} disabled={firm.status !== "ACTIVE"} />
+                    )
+                  ) : null}
+                  {canManageFirms && (
+                    <>
+                      <EditFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} />
+                      <DeleteFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} recordCount={firm._count.users + firm._count.branches + firm._count.products} />
+                    </>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -46,6 +46,8 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           data: { lastLoginAt: new Date() },
         });
 
+        const canSwitchFirms = isPlatformRole(user.role) || user.role === "ADMIN" || permissions.includes("firms.manage" as const);
+
         return {
           id: user.id,
           name: user.name,
@@ -60,10 +62,11 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           firmId: user.firmId,
           firmName: user.firm?.name ?? null,
           // A regular firm user's active firm is always their own, fixed
-          // firm — never switchable. A PLATFORM_ADMIN starts with none
-          // active until they explicitly enter one from the Firms module.
-          activeFirmId: isPlatformRole(user.role) ? null : user.firmId,
-          activeFirmName: isPlatformRole(user.role) ? null : (user.firm?.name ?? null),
+          // firm — never switchable. A PLATFORM_ADMIN, ADMIN, or user with
+          // FIRMS_MANAGE permission starts with none active until they
+          // explicitly enter one from the Firms module.
+          activeFirmId: canSwitchFirms ? null : user.firmId,
+          activeFirmName: canSwitchFirms ? null : (user.firm?.name ?? null),
           // The reporting view is a property of the user record. COMBINED is
           // the default full view; the seeded GST-reconciliation admin runs
           // in GST_ONLY. Server-side always — never client-supplied.
@@ -115,10 +118,11 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           token.accessView = fresh.accessView === "GST_ONLY" ? "GST_ONLY" : "COMBINED";
         }
 
-        const payload = updateData as { activeFirmId?: string | null } | undefined;
+        const payload = updateData as { activeFirmId?: string | null; branchId?: string | null } | undefined;
 
         const requestedFirmId = payload?.activeFirmId;
-        if (requestedFirmId !== undefined && isPlatformRole(token.role as UserRole)) {
+        const canSwitchFirms = isPlatformRole(token.role as UserRole) || token.role === "ADMIN" || (token.permissions as string[]).includes("firms.manage");
+        if (requestedFirmId !== undefined && canSwitchFirms) {
           if (requestedFirmId === null) {
             token.activeFirmId = null;
             token.activeFirmName = null;
@@ -130,6 +134,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
             if (targetFirm && targetFirm.status === "ACTIVE") {
               token.activeFirmId = targetFirm.id;
               token.activeFirmName = targetFirm.name;
+              // Also update branch to a branch in the new firm
+              const targetBranch = await prisma.branch.findFirst({
+                where: { firmId: targetFirm.id, isActive: true },
+                select: { id: true, name: true, code: true },
+              });
+              if (targetBranch) {
+                token.branchId = targetBranch.id;
+                token.branchName = targetBranch.name;
+                token.branchCode = targetBranch.code;
+              }
             }
           }
         }

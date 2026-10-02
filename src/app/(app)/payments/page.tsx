@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { DataTable, type Column } from "@/components/shared/data-table";
@@ -77,7 +79,7 @@ export default async function PaymentsPage() {
   }));
 
   const columns: Column<Row>[] = [
-    { key: "number", header: "Receipt #", cell: (row) => <span className="font-medium">{row.number}</span> },
+    { key: "number", header: "Receipt #", cell: (row) => <Link href={`/payments/${row.id}`} className="font-medium hover:text-primary hover:underline">{row.number}</Link> },
     {
       key: "direction",
       header: "Type",
@@ -131,14 +133,14 @@ export default async function PaymentsPage() {
         getRowKey={(row) => row.id}
         empty={<EmptyState title="No payments recorded yet" />}
         renderMobileCard={(row) => (
-          <div className="space-y-1">
+          <Link href={`/payments/${row.id}`} className="block space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-medium">{row.number}</span>
               <span className="numeric font-semibold">{formatCurrency(row.amount)}</span>
             </div>
             <p className="text-sm text-muted-foreground">{row.customer ?? "On account"} · {PAYMENT_METHOD_LABELS[row.method] ?? row.method}</p>
             <p className="text-xs text-muted-foreground">{formatDate(row.date)}</p>
-          </div>
+          </Link>
         )}
       />
     </div>

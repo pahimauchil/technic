@@ -62,7 +62,7 @@ export default async function InvoicesPage({
       hideOnMobile: true,
       cell: (row) => (
         <Badge tone={row.kind === "TAX_INVOICE" ? "info" : "neutral"}>
-          {row.kind === "TAX_INVOICE" ? "Tax Invoice" : "Bill"}
+          {row.kind === "TAX_INVOICE" ? "Tax Invoice" : "Non-Tax Invoice"}
         </Badge>
       ),
     },
@@ -131,7 +131,7 @@ export default async function InvoicesPage({
             label: "Type",
             options: [
               { value: "GST", label: "Tax Invoice" },
-              { value: "NON_GST", label: "Bill" },
+              { value: "NON_GST", label: "Non-Tax Invoice" },
             ],
           },
           {

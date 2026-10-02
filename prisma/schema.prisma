@@ -953,7 +953,7 @@ model Customer {
   firmId   String
   firm     Firm   @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id       String @id @default(cuid())
-  code     String @unique
+  code     String
   branchId String
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
@@ -993,6 +993,7 @@ model Customer {
   warranties   Warranty[]
   whatsappLogs WhatsAppLog[]
 
+  @@unique([firmId, code])
   @@index([branchId, name])
   @@index([phone])
   @@index([gstin])
@@ -1004,7 +1005,7 @@ model Supplier {
   firmId         String
   firm           Firm    @relation(fields: [firmId], references: [id], onDelete: Restrict)
   id             String  @id @default(cuid())
-  code           String  @unique
+  code           String  
   name           String
   company        String?
   gstin          String?
@@ -1035,6 +1036,7 @@ model Supplier {
   purchaseReturns  PurchaseReturn[]
   payments         Payment[]
 
+  @@unique([firmId, code])
   @@index([firmId, name])
   @@index([gstin])
   @@map("suppliers")

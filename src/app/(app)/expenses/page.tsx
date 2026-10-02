@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { FilterBar } from "@/components/shared/filter-bar";
@@ -35,7 +37,7 @@ export default async function ExpensesPage({
   const canApprove = user.permissions.includes("expenses.approve");
 
   const columns: Column<(typeof rows)[number]>[] = [
-    { key: "number", header: "Voucher #", cell: (row) => <span className="font-medium">{row.expenseNumber}</span> },
+    { key: "number", header: "Voucher #", cell: (row) => <Link href={`/expenses/${row.id}`} className="font-medium hover:text-primary hover:underline">{row.expenseNumber}</Link> },
     { key: "description", header: "Description", cell: (row) => <span className="line-clamp-1">{row.description}</span> },
     { key: "category", header: "Category", hideOnMobile: true, cell: (row) => <Badge tone="outline">{EXPENSE_CATEGORY_LABELS[row.category] ?? row.category}</Badge> },
     { key: "paidTo", header: "Paid to", hideOnMobile: true, cell: (row) => row.paidTo ?? "—" },

@@ -1,6 +1,9 @@
 import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -30,6 +33,7 @@ export default async function ConvertQuotationPage({ params }: { params: Promise
       <PageHeader
         title={`Convert ${quotation.quotationNumber}`}
         description={`${quotation.customer.name} · ${formatDate(quotation.quotationDate)}`}
+        backButton={<Button asChild variant="ghost" size="sm"><Link href="/quotations"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link></Button>}
       />
 
       <Card>
@@ -61,7 +65,7 @@ export default async function ConvertQuotationPage({ params }: { params: Promise
           </div>
           <div className="px-4 pt-2">
             <Badge tone={quotation.taxMode === "GST" ? "info" : "neutral"}>
-              {quotation.taxMode === "GST" ? "Tax Invoice" : "Bill"}
+              {quotation.taxMode === "GST" ? "Tax Invoice" : "Non-Tax Invoice"}
             </Badge>
           </div>
         </CardContent>

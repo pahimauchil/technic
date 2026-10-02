@@ -172,7 +172,7 @@ export default async function DashboardPage() {
                       <p className="truncate text-sm font-medium">
                         {invoice.invoiceNumber}
                         <span className="ml-2 text-xs font-normal text-muted-foreground">
-                          {invoice.kind === "TAX_INVOICE" ? "Tax Invoice" : "Bill"}
+                          {invoice.kind === "TAX_INVOICE" ? "Tax Invoice" : "Non-Tax Invoice"}
                         </span>
                       </p>
                       <p className="truncate text-xs text-muted-foreground">

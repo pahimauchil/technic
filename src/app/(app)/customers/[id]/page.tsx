@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
+import { Button } from "@/components/ui/button";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +61,7 @@ export default async function CustomerDetailPage({
       <PageHeader
         title={customer.name}
         description={`${CUSTOMER_TYPE_LABELS[customer.type] ?? customer.type} customer · code ${customer.code}`}
+        backButton={<Button asChild variant="ghost" size="sm"><Link href="/customers"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link></Button>}
       />
 
       <div className="grid gap-4 sm:grid-cols-3">

@@ -174,7 +174,7 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
   const builder = new PDFDocumentBuilder(company);
 
   builder.renderCompanyHeader(branchProfile(invoice.branch));
-  builder.renderDocumentTitle(isTaxInvoice ? "Tax Invoice" : "Bill of Supply");
+  builder.renderDocumentTitle(isTaxInvoice ? "Tax Invoice" : "Non-Tax Invoice");
 
   const placeOfSupply = invoice.placeOfSupply || invoice.customer?.state || "—";
 
@@ -263,7 +263,7 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
   builder.renderSignatureBlock([{ title: `For ${company.name}`, name: invoice.createdBy?.name }]);
 
   const buffer = await builder.build();
-  const kindLabel = isTaxInvoice ? "Tax-Invoice" : "Bill";
+  const kindLabel = isTaxInvoice ? "Tax-Invoice" : "Non-Tax-Invoice";
   return { buffer, fileName: `TECHNIC-${kindLabel}-${invoice.invoiceNumber.replace(/\//g, "-")}.pdf` };
 }
 
@@ -665,4 +665,86 @@ export async function generateExpenseReceiptPDF(expenseId: string): Promise<{ bu
 
   const buffer = await builder.build();
   return { buffer, fileName: `TECHNIC-Expense-${expense.expenseNumber.replace(/\//g, "-")}.pdf` };
+}
+
+// ---------------------------------------------------------------------------
+// Purchase return
+// ---------------------------------------------------------------------------
+
+export async function generatePurchaseReturnPDF(returnId: string): Promise<{ buffer: Buffer; fileName: string }> {
+  const purchaseReturn = await prisma.purchaseReturn.findUnique({
+    where: { id: returnId },
+    include: {
+      supplier: true,
+      branch: true,
+      items: {
+        include: {
+          product: { select: { name: true } },
+        },
+      },
+      createdBy: { select: { name: true } },
+    },
+  });
+
+  if (!purchaseReturn) throw new Error(`Purchase return #${returnId} not found.`);
+
+  const company = await getCompanyProfile(purchaseReturn.firmId);
+  const builder = new PDFDocumentBuilder(company);
+
+  builder.renderCompanyHeader(branchProfile(purchaseReturn.branch));
+  builder.renderDocumentTitle("Purchase Return");
+
+  builder.renderInfoColumns([
+    {
+      heading: "Supplier",
+      lines: [
+        purchaseReturn.supplier.name,
+        ...(purchaseReturn.supplier.gstin ? [`GSTIN: ${purchaseReturn.supplier.gstin}`] : []),
+        `Ph: ${purchaseReturn.supplier.phone || "—"}`,
+      ],
+    },
+    {
+      heading: "Return Details",
+      lines: [
+        purchaseReturn.returnNumber,
+        `Date: ${formatDate(purchaseReturn.returnedAt)}`,
+        `Reason: ${purchaseReturn.reason}`,
+      ],
+    },
+  ]);
+
+  let totalQty = 0;
+  const rows: PDFTableRow[] = purchaseReturn.items.map((line, idx) => {
+    totalQty += line.quantity;
+    return {
+      sl: idx + 1,
+      item: `${line.description}${serialSuffix(line.serialNumbers)}`,
+      hsn: "—",
+      qty: line.quantity,
+      rate: formatCurrency(line.unitPrice),
+      amount: formatCurrency(line.lineTotal),
+    };
+  });
+
+  builder.renderItemsTable(simpleInvoiceColumns(), rows, {
+    sl: "",
+    item: "TOTAL",
+    hsn: "",
+    qty: totalQty,
+    rate: "",
+    amount: formatCurrency(purchaseReturn.total),
+  });
+
+  const summaryLines: SummaryLine[] = [{ label: "Total Return", value: formatCurrency(purchaseReturn.total), highlight: true }];
+
+  builder.renderFinancialSummary({
+    amountWordsLabel: "Amount In Words",
+    amountWords: amountInWords(purchaseReturn.total),
+    lines: summaryLines,
+  });
+
+  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: purchaseReturn.createdBy?.name }]);
+
+  const buffer = await builder.build();
+  return { buffer, fileName: `TECHNIC-Purchase-Return-${purchaseReturn.returnNumber.replace(/\//g, "-")}.pdf` };
 }

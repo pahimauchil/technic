@@ -411,7 +411,7 @@ export function PosTerminal({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="GST">Tax Invoice</SelectItem>
-                      <SelectItem value="NON_GST">Bill</SelectItem>
+                      <SelectItem value="NON_GST">Non-Tax Invoice</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -426,7 +426,7 @@ export function PosTerminal({
                     <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="numeric">{formatCurrency(totals.sgst)}</span></div>
                   </>
                 ) : (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="numeric">Bill</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="numeric">Non-Tax</span></div>
                 )}
                 {totals.roundOff !== 0 ? (
                   <div className="flex justify-between"><span className="text-muted-foreground">Round off</span><span className="numeric">{formatCurrency(totals.roundOff)}</span></div>
@@ -468,7 +468,7 @@ export function PosTerminal({
                 {pending ? "Billing…" : `Charge ${formatCurrency(totals.total)}`}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Invoice will be a {mode === "GST" ? "Tax Invoice" : "Bill"}
+                Invoice will be a {mode === "GST" ? "Tax Invoice" : "Non-Tax Invoice"}
               </p>
             </>
           ) : null}

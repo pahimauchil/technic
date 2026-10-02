@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -48,7 +50,7 @@ export default async function SalesReturnsPage() {
   const canApprove = user.permissions.includes("sales.cancel") || user.permissions.includes("invoice.cancel");
 
   const columns: Column<Row>[] = [
-    { key: "number", header: "Return #", cell: (row) => <span className="font-medium">{row.number}</span> },
+    { key: "number", header: "Return #", cell: (row) => <Link href={`/sales-returns/${row.id}`} className="font-medium hover:text-primary hover:underline">{row.number}</Link> },
     { key: "customer", header: "Customer", cell: (row) => <span className="line-clamp-1">{row.customer}</span> },
     { key: "invoice", header: "Against", hideOnMobile: true, cell: (row) => row.invoiceNumber },
     { key: "reason", header: "Reason", hideOnMobile: true, cell: (row) => <span className="line-clamp-1 text-muted-foreground">{row.reason}</span> },
@@ -72,7 +74,7 @@ export default async function SalesReturnsPage() {
         getRowKey={(row) => row.id}
         empty={<EmptyState title="No returns recorded" description="Returns are raised against an invoice." />}
         renderMobileCard={(row) => (
-          <div className="space-y-1">
+          <Link href={`/sales-returns/${row.id}`} className="block space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-medium">{row.number}</span>
               <StatusBadge status={row.status} label={SALES_RETURN_STATUS_LABELS[row.status] ?? row.status} />
@@ -83,7 +85,7 @@ export default async function SalesReturnsPage() {
               <span className="numeric font-semibold">{formatCurrency(row.total)}</span>
             </div>
             {row.status === "PENDING" && canApprove ? <ApproveReturnButton returnId={row.id} /> : null}
-          </div>
+          </Link>
         )}
       />
     </div>

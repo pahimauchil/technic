@@ -5,6 +5,7 @@ interface PageHeaderProps {
   title: string;
   description?: string;
   actions?: ReactNode;
+  backButton?: ReactNode;
   className?: string;
   children?: ReactNode;
 }
@@ -13,6 +14,7 @@ export function PageHeader({
   title,
   description,
   actions,
+  backButton,
   className,
   children,
 }: PageHeaderProps) {
@@ -20,6 +22,9 @@ export function PageHeader({
     <div className={cn("flex flex-col gap-4", className)}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
+          {backButton ? (
+            <div className="mb-2">{backButton}</div>
+          ) : null}
           <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
             {title}
           </h1>

@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -44,7 +46,7 @@ export default async function PurchaseBillsPage() {
   }));
 
   const columns: Column<Row>[] = [
-    { key: "number", header: "Bill #", cell: (row) => <span className="font-medium">{row.number}</span> },
+    { key: "number", header: "Bill #", cell: (row) => <Link href={`/purchases/bills/${row.id}`} className="font-medium hover:text-primary hover:underline">{row.number}</Link> },
     { key: "supplier", header: "Supplier", cell: (row) => <span className="line-clamp-1">{row.supplier}</span> },
     { key: "ref", header: "Supplier ref", hideOnMobile: true, cell: (row) => row.supplierRef ?? "—" },
     { key: "date", header: "Date", hideOnMobile: true, cell: (row) => <span className="numeric">{formatDate(row.date)}</span> },
@@ -79,14 +81,14 @@ export default async function PurchaseBillsPage() {
         getRowKey={(row) => row.id}
         empty={<EmptyState title="No purchase bills yet" description="Bills are created when you receive goods." />}
         renderMobileCard={(row) => (
-          <div className="space-y-1">
+          <Link href={`/purchases/bills/${row.id}`} className="block space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-medium">{row.number}</span>
               <StatusBadge status={row.status} label={PURCHASE_INVOICE_STATUS_LABELS[row.status] ?? row.status} />
             </div>
             <p className="text-sm text-muted-foreground">{row.supplier} · {formatDate(row.date)}</p>
             <p className="numeric text-sm font-semibold">{formatCurrency(row.total)}</p>
-          </div>
+          </Link>
         )}
       />
     </div>

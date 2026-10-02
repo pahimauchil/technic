@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -52,7 +54,7 @@ export default async function PurchasesPage() {
   }));
 
   const columns: Column<Row>[] = [
-    { key: "number", header: "PO #", cell: (row) => <span className="font-medium">{row.number}</span> },
+    { key: "number", header: "PO #", cell: (row) => <Link href={`/purchases/${row.id}`} className="font-medium hover:text-primary hover:underline">{row.number}</Link> },
     { key: "supplier", header: "Supplier", cell: (row) => <span className="line-clamp-1">{row.supplier}</span> },
     { key: "date", header: "Date", hideOnMobile: true, cell: (row) => <span className="numeric">{formatDate(row.date)}</span> },
     { key: "total", header: "Total", headerClassName: "text-right", className: "text-right numeric", cell: (row) => formatCurrency(row.total) },
@@ -116,12 +118,14 @@ export default async function PurchasesPage() {
         empty={<EmptyState title="No purchase orders yet" description="Use “New purchase order” to ask a supplier for stock." />}
         renderMobileCard={(row) => (
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">{row.number}</span>
-              <StatusBadge status={row.status} label={PURCHASE_ORDER_STATUS_LABELS[row.status] ?? row.status} />
-            </div>
-            <p className="text-sm text-muted-foreground">{row.supplier} · {formatDate(row.date)}</p>
-            <p className="numeric text-sm font-semibold">{formatCurrency(row.total)}</p>
+            <Link href={`/purchases/${row.id}`} className="block">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{row.number}</span>
+                <StatusBadge status={row.status} label={PURCHASE_ORDER_STATUS_LABELS[row.status] ?? row.status} />
+              </div>
+              <p className="text-sm text-muted-foreground">{row.supplier} · {formatDate(row.date)}</p>
+              <p className="numeric text-sm font-semibold">{formatCurrency(row.total)}</p>
+            </Link>
             {canReceive && row.status !== "RECEIVED" && row.status !== "CANCELLED" ? (
               <ReceivePoButton
                 po={{

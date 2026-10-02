@@ -491,3 +491,74 @@ export async function approveExpense(
     },
   });
 }
+
+export async function getPaymentForView(
+  firmId: string,
+  paymentId: string,
+  options: { taxMode?: "GST" | "NON_GST" } = {},
+) {
+  const whereClause: any = { id: paymentId, firmId };
+  
+  if (options.taxMode) {
+    whereClause.OR = [
+      { invoice: { taxMode: options.taxMode } },
+      { purchaseInvoice: { taxMode: options.taxMode } },
+      { isAdvance: true },
+      { salesReturn: { invoice: { taxMode: options.taxMode } } },
+    ];
+  }
+
+  const payment = await prisma.payment.findFirst({
+    where: whereClause,
+    include: {
+      customer: true,
+      invoice: {
+        include: {
+          customer: { select: { name: true } },
+        },
+      },
+      branch: true,
+      receivedBy: { select: { name: true } },
+      salesReturn: {
+        include: {
+          invoice: { select: { invoiceNumber: true } },
+        },
+      },
+    },
+  });
+  if (!payment) throw new NotFoundError("Payment not found");
+  return payment;
+}
+
+export async function getSalesReturnForView(
+  firmId: string,
+  returnId: string,
+  options: { taxMode?: "GST" | "NON_GST" } = {},
+) {
+  const salesReturn = await prisma.salesReturn.findFirst({
+    where: { 
+      id: returnId, 
+      firmId,
+      invoice: options.taxMode ? { taxMode: options.taxMode } : {},
+    },
+    include: {
+      customer: true,
+      invoice: {
+        include: {
+          customer: { select: { name: true } },
+        },
+      },
+      branch: true,
+      lines: {
+        include: {
+          product: { select: { name: true, sku: true } },
+          variant: { select: { name: true, sku: true } },
+        },
+      },
+      createdBy: { select: { name: true } },
+      approvedBy: { select: { name: true } },
+    },
+  });
+  if (!salesReturn) throw new NotFoundError("Sales return not found");
+  return salesReturn;
+}

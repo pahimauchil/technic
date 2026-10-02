@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -37,7 +39,7 @@ export default async function PurchaseReturnsPage() {
   }));
 
   const columns: Column<Row>[] = [
-    { key: "number", header: "Return #", cell: (row) => <span className="font-medium">{row.number}</span> },
+    { key: "number", header: "Return #", cell: (row) => <Link href={`/purchases/returns/${row.id}`} className="font-medium hover:text-primary hover:underline">{row.number}</Link> },
     { key: "supplier", header: "Supplier", cell: (row) => row.supplier },
     { key: "reason", header: "Reason", hideOnMobile: true, cell: (row) => <span className="line-clamp-1 text-muted-foreground">{row.reason}</span> },
     { key: "date", header: "Date", hideOnMobile: true, cell: (row) => <span className="numeric">{formatDate(row.date)}</span> },
@@ -57,13 +59,13 @@ export default async function PurchaseReturnsPage() {
         getRowKey={(row) => row.id}
         empty={<EmptyState title="No purchase returns recorded" />}
         renderMobileCard={(row) => (
-          <div className="space-y-1">
+          <Link href={`/purchases/returns/${row.id}`} className="block space-y-1">
             <div className="flex items-center justify-between">
               <span className="font-medium">{row.number}</span>
               <span className="numeric font-semibold">{formatCurrency(row.total)}</span>
             </div>
             <p className="text-sm text-muted-foreground">{row.supplier} · {formatDate(row.date)}</p>
-          </div>
+          </Link>
         )}
       />
     </div>

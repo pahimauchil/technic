@@ -75,7 +75,9 @@ export default async function QuotationsPage({
       key: "number",
       header: "Quotation #",
       cell: (row) => (
-        <span className="font-medium">{row.number}</span>
+        <Link href={`/quotations/${row.id}`} className="font-medium hover:text-primary hover:underline">
+          {row.number}
+        </Link>
       ),
     },
     { key: "customer", header: "Customer", cell: (row) => <span className="line-clamp-1">{row.customer}</span> },
@@ -91,7 +93,7 @@ export default async function QuotationsPage({
       key: "mode",
       header: "Mode",
       hideOnMobile: true,
-      cell: (row) => <Badge tone={row.taxMode === "GST" ? "info" : "neutral"}>{row.taxMode === "GST" ? "GST" : "Bill"}</Badge>,
+      cell: (row) => <Badge tone={row.taxMode === "GST" ? "info" : "neutral"}>{row.taxMode === "GST" ? "GST" : "Non-Tax"}</Badge>,
     },
     {
       key: "status",
@@ -145,15 +147,17 @@ export default async function QuotationsPage({
         empty={<EmptyState title="No quotations yet" description="Use “New quotation” to create your first estimate." />}
         renderMobileCard={(row) => (
           <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="font-medium">{row.number}</span>
-              <StatusBadge status={row.status} label={QUOTATION_STATUS_LABELS[row.status] ?? row.status} />
-            </div>
-            <p className="text-sm text-muted-foreground">{row.customer}</p>
-            <div className="flex items-center justify-between text-sm">
-              <span>{formatDate(row.date)}</span>
-              <span className="numeric font-semibold">{formatCurrency(row.total)}</span>
-            </div>
+            <Link href={`/quotations/${row.id}`} className="block">
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{row.number}</span>
+                <StatusBadge status={row.status} label={QUOTATION_STATUS_LABELS[row.status] ?? row.status} />
+              </div>
+              <p className="text-sm text-muted-foreground">{row.customer}</p>
+              <div className="flex items-center justify-between text-sm">
+                <span>{formatDate(row.date)}</span>
+                <span className="numeric font-semibold">{formatCurrency(row.total)}</span>
+              </div>
+            </Link>
             {row.status !== "CONVERTED" && user.permissions.includes("quotation.convert") ? (
               <ConvertButton quotationId={row.id} />
             ) : null}

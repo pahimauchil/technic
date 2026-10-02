@@ -190,7 +190,7 @@ export function NewQuotationButton({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="GST">Tax Invoice</SelectItem>
-                  <SelectItem value="NON_GST">Bill</SelectItem>
+                  <SelectItem value="NON_GST">Non-Tax Invoice</SelectItem>
                 </SelectContent>
               </Select>
             </div>

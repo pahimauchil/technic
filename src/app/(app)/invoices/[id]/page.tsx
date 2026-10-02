@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { FileDown, Printer, XCircle } from "lucide-react";
+import { FileDown, Printer, XCircle, ArrowLeft } from "lucide-react";
 
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { WhatsAppShareButton } from "@/components/shared/whatsapp-share-button";
 import { CancelInvoiceButton } from "./cancel-invoice-button";
 import { RecordInvoicePaymentButton } from "./record-payment-button";
 import { SalesReturnButton } from "./sales-return-button";
@@ -47,7 +48,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     <div className="space-y-4">
       <PageHeader
         title={invoice.invoiceNumber}
-        description={`${isTaxInvoice ? "Tax Invoice" : "Bill"} · ${formatDate(invoice.invoiceDate)}`}
+        description={`${isTaxInvoice ? "Tax Invoice" : "Non-Tax Invoice"} · ${formatDate(invoice.invoiceDate)}`}
+        backButton={<Button asChild variant="ghost" size="sm"><Link href="/invoices"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link></Button>}
         actions={
           <>
             <Button asChild variant="outline">
@@ -55,6 +57,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <FileDown /> PDF
               </a>
             </Button>
+            <WhatsAppShareButton
+              documentId={invoice.id}
+              documentType="invoice"
+              documentNumber={invoice.invoiceNumber}
+              customerPhone={invoice.billToPhone || undefined}
+            />
             {canRecordPayment ? (
               <RecordInvoicePaymentButton invoiceId={invoice.id} amountDue={Number(invoice.amountDue)} />
             ) : null}
@@ -80,7 +88,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
         <StatusBadge status={invoice.status} label={INVOICE_STATUS_LABELS[invoice.status] ?? invoice.status} dot />
         <StatusBadge
           status={invoice.taxMode}
-          label={invoice.taxMode === "GST" ? "GST mode" : "Bill"}
+          label={invoice.taxMode === "GST" ? "GST mode" : "Non-Tax"}
           tone={invoice.taxMode === "GST" ? "info" : "neutral"}
         />
         {invoice.status === "CANCELLED" && invoice.cancellationReason ? (

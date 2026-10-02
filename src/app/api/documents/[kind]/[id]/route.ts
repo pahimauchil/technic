@@ -8,6 +8,7 @@ import {
   generateQuotationPDF,
   generatePurchaseOrderPDF,
   generatePurchaseInvoicePDF,
+  generatePurchaseReturnPDF,
   generatePaymentReceiptPDF,
   generateExpenseReceiptPDF,
 } from "@/lib/pdf/pdf-templates";
@@ -109,6 +110,18 @@ export async function GET(
         const expense = await prisma.expense.findFirst({ where: { id, firmId: user.activeFirmId }, select: { id: true } });
         if (!expense) throw new NotFoundError("Expense not found");
         result = await generateExpenseReceiptPDF(expense.id);
+        break;
+      }
+      case "purchase-return": {
+        if (!hasPermission(user, PERMISSIONS.PURCHASE_VIEW)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+        }
+        const purchaseReturn = await prisma.purchaseReturn.findFirst({
+          where: { id, firmId: user.activeFirmId, ...taxModeWhere(user) },
+          select: { id: true },
+        });
+        if (!purchaseReturn) throw new NotFoundError("Purchase return not found");
+        result = await generatePurchaseReturnPDF(purchaseReturn.id);
         break;
       }
       default:
