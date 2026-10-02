@@ -28,10 +28,14 @@ if (!process.env.DATABASE_URL) {
   }
 }
 
-const connectionString = process.env.DATABASE_URL;
-if (!connectionString) throw new Error("DATABASE_URL is not set");
+import { getPGlitePool } from "../src/lib/db-setup";
 
-const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+const connectionString = process.env.DATABASE_URL;
+const prisma = new PrismaClient({
+  adapter: connectionString
+    ? new PrismaPg({ connectionString })
+    : new PrismaPg(getPGlitePool() as any),
+});
 
 const FIRM_ID = "firm_technic_main";
 const FY = "26-27";
@@ -780,6 +784,38 @@ async function main() {
   if (payMax > 0) {
     await setCounter("payment", "GST", payMax);
     await setCounter("payment", "NON_GST", payMax);
+  }
+
+  const customerCount = await prisma.customer.count({ where: { firmId: FIRM_ID } });
+  if (customerCount > 0) {
+    await prisma.documentSequence.upsert({
+      where: {
+        firmId_documentType_taxMode_financialYear: {
+          firmId: FIRM_ID,
+          documentType: "customer",
+          taxMode: "NON_GST",
+          financialYear: "ALL",
+        },
+      },
+      create: { firmId: FIRM_ID, documentType: "customer", taxMode: "NON_GST", financialYear: "ALL", value: customerCount },
+      update: { value: customerCount },
+    });
+  }
+
+  const supplierCount = await prisma.supplier.count({ where: { firmId: FIRM_ID } });
+  if (supplierCount > 0) {
+    await prisma.documentSequence.upsert({
+      where: {
+        firmId_documentType_taxMode_financialYear: {
+          firmId: FIRM_ID,
+          documentType: "supplier",
+          taxMode: "NON_GST",
+          financialYear: "ALL",
+        },
+      },
+      create: { firmId: FIRM_ID, documentType: "supplier", taxMode: "NON_GST", financialYear: "ALL", value: supplierCount },
+      update: { value: supplierCount },
+    });
   }
 
   console.log("Seed complete.");

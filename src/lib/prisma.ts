@@ -1,23 +1,15 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "@/generated/prisma/client";
+import { getPGlitePool } from "@/lib/db-setup";
 
 const createPrismaClient = (): PrismaClient => {
   const connectionString = process.env.DATABASE_URL;
-  if (!connectionString) {
-    // Deferred to first real use (see the Proxy below) rather than thrown at
-    // module load, so a build step without runtime env vars doesn't fail —
-    // but a genuinely missing DATABASE_URL at runtime must still fail loudly
-    // instead of silently connecting to some other local database.
-    throw new Error(
-      "DATABASE_URL is not set. Copy .env.example to .env and configure your PostgreSQL connection.",
-    );
-  }
+  const adapter = connectionString
+    ? new PrismaPg({ connectionString })
+    : new PrismaPg(getPGlitePool() as any);
 
   return new PrismaClient({
-    adapter: new PrismaPg({ connectionString }),
-    // Remote Postgres (e.g. Neon over the internet) can be slow enough that
-    // multi-write transactions like POS checkout exceed the 5s default and
-    // roll back silently from the user's point of view. Give headroom.
+    adapter,
     transactionOptions: { maxWait: 5_000, timeout: 30_000 },
     log:
       process.env.NODE_ENV === "development"
@@ -34,14 +26,6 @@ function getPrismaClient(): PrismaClient {
   if (globalForPrisma.prisma) {
     return globalForPrisma.prisma;
   }
-  // Cache on globalThis in every environment, not just development. This
-  // module's export is a Proxy whose get() trap calls getPrismaClient() on
-  // every single property access (prisma.invoice, prisma.product, ...) — so
-  // without this cache, production requests were constructing a brand-new
-  // PrismaClient (and a brand-new pg connection pool) on every property
-  // access and never closing it, exhausting Postgres's max_connections
-  // within a handful of page loads. Dev keeps the same global-cache pattern
-  // it always needed to survive Fast Refresh module reloads.
   const client = createPrismaClient();
   globalForPrisma.prisma = client;
   return client;
@@ -56,4 +40,3 @@ export const prisma = new Proxy({} as PrismaClient, {
 });
 
 export type { Prisma } from "@/generated/prisma/client";
-
