@@ -27,14 +27,16 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <div className="min-h-dvh bg-background">
-      <Sidebar
-        permissions={user.permissions}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        user={user}
-      />
-      <div className="lg:pl-[272px]">
-        <div className="mx-auto w-full max-w-[1600px] px-3 pt-3 sm:px-5 sm:pt-4">
+      <div className="no-print">
+        <Sidebar
+          permissions={user.permissions}
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          user={user}
+        />
+      </div>
+      <div className="lg:pl-[272px] print:pl-0">
+        <div className="no-print mx-auto w-full max-w-[1600px] px-3 pt-3 sm:px-5 sm:pt-4">
           <Topbar
             name={user.name}
             email={user.email}
@@ -49,7 +51,9 @@ export function AppShell({ user, children }: AppShellProps) {
             {children}
           </div>
         </main>
-        <BottomNav permissions={user.permissions} onOpenSidebar={() => setSidebarOpen(true)} />
+        <div className="no-print">
+          <BottomNav permissions={user.permissions} onOpenSidebar={() => setSidebarOpen(true)} />
+        </div>
       </div>
     </div>
   );

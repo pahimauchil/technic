@@ -36,6 +36,7 @@ export function EditProductButton({
   product: {
     id: string;
     name: string;
+    subName?: string | null;
     sku: string;
     barcode: string | null;
     hsnCode: string | null;
@@ -57,6 +58,7 @@ export function EditProductButton({
   const [pending, startTransition] = useTransition();
 
   const [name, setName] = useState(product.name);
+  const [subName, setSubName] = useState(product.subName ?? "");
   const [sku, setSku] = useState(product.sku);
   const [barcode, setBarcode] = useState(product.barcode ?? "");
   const [hsnCode, setHsnCode] = useState(product.hsnCode ?? "");
@@ -72,6 +74,7 @@ export function EditProductButton({
       const result = await updateProductAction({
         id: product.id,
         name,
+        subName: subName.trim() || null,
         sku,
         barcode: barcode || null,
         hsnCode: hsnCode || null,
@@ -146,6 +149,10 @@ export function EditProductButton({
             <div className="space-y-1.5">
               <Label htmlFor="ep-name">Product name *</Label>
               <Input id="ep-name" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="ep-subname">Sub name / model</Label>
+              <Input id="ep-subname" value={subName} onChange={(e) => setSubName(e.target.value)} placeholder="e.g. JJ 1HP Premium 24LTR Tank" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ep-sku">SKU *</Label>

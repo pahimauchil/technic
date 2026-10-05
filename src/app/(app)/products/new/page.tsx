@@ -35,6 +35,7 @@ export default function NewProductPage() {
   const [brands, setBrands] = useState<Option[]>([]);
 
   const [name, setName] = useState("");
+  const [subName, setSubName] = useState("");
   const [sku, setSku] = useState("");
   const [barcode, setBarcode] = useState("");
   const [hsnCode, setHsnCode] = useState("");
@@ -63,6 +64,7 @@ export default function NewProductPage() {
     startTransition(async () => {
       const result = await createProductAction({
         name,
+        subName: subName.trim() || null,
         sku,
         barcode: barcode || null,
         hsnCode: hsnCode || null,
@@ -102,7 +104,11 @@ export default function NewProductPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="p-name">Product name *</Label>
-              <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Galaxy S24 5G" />
+              <Input id="p-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Pressure Booster Pump" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="p-subname">Sub name / model</Label>
+              <Input id="p-subname" value={subName} onChange={(e) => setSubName(e.target.value)} placeholder="e.g. JJ 1HP Premium 24LTR Tank" />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="p-sku">SKU *</Label>

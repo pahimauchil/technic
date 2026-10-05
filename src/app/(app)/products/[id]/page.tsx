@@ -57,7 +57,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
     <div className="space-y-4">
       <PageHeader
         title={product.name}
-        description={`${product.sku}${product.brand ? ` · ${product.brand.name}` : ""}${product.category ? ` · ${product.category.name}` : ""}`}
+        description={`${product.subName ? `${product.subName} · ` : ""}${product.sku}${product.brand ? ` · ${product.brand.name}` : ""}${product.category ? ` · ${product.category.name}` : ""}`}
         backButton={<Button asChild variant="ghost" size="sm"><Link href="/products"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link></Button>}
         actions={
           <>
@@ -72,6 +72,7 @@ export default async function ProductDetailPage({ params }: { params: Promise<{ 
                 product={{
                   id: product.id,
                   name: product.name,
+                  subName: product.subName,
                   sku: product.sku,
                   barcode: product.barcode,
                   hsnCode: product.hsnCode,

@@ -30,6 +30,13 @@ export async function createCustomerAction(input: {
     });
 
     revalidatePath("/customers");
-    return { code: customer.code, id: customer.id };
+    return {
+      code: customer.code,
+      id: customer.id,
+      name: customer.name,
+      phone: customer.phone,
+      gstin: customer.gstin,
+      state: customer.state,
+    };
   });
 }

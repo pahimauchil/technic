@@ -20,3 +20,4 @@ _IGNORE_session/
 .freebuff/
 .node-persist/
 .data/
+backups/

@@ -88,6 +88,7 @@ export async function getCompanyProfile(firmId: string): Promise<CompanyProfile>
     website: pick("company_website", firm?.website),
     gstin: map.get("company_gstin") || firm?.gstin || "",
     pan: firm?.pan || "",
+    state: firm?.state || "",
     logoUrl: map.get("company_logo") || "/logo.png",
     footerText:
       map.get("document_footer_text") ||

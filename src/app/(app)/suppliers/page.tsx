@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { PageHeader } from "@/components/shared/page-header";
 import { DataTable, type Column } from "@/components/shared/data-table";
 import { Badge } from "@/components/ui/badge";
@@ -40,7 +42,7 @@ export default async function SuppliersPage() {
 
   const columns: Column<Row>[] = [
     { key: "name", header: "Supplier", cell: (row) => (
-      <span className="font-medium">{row.name}<span className="ml-2 text-xs font-normal text-muted-foreground">{row.code}</span></span>
+      <Link href={`/ledgers/supplier?party=${row.id}`} className="font-medium hover:text-primary hover:underline" title="Open supplier ledger">{row.name}<span className="ml-2 text-xs font-normal text-muted-foreground">{row.code}</span></Link>
     ) },
     { key: "phone", header: "Phone", hideOnMobile: true, cell: (row) => <span className="numeric">{row.phone || "—"}</span> },
     { key: "gstin", header: "GSTIN", hideOnMobile: true, cell: (row) => <span className="font-mono text-xs">{row.gstin || "—"}</span> },

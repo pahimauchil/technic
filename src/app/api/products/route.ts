@@ -25,6 +25,7 @@ export async function GET(request: Request) {
           ? {
               OR: [
                 { name: { contains: query, mode: "insensitive" } },
+                { subName: { contains: query, mode: "insensitive" } },
                 { sku: { contains: query, mode: "insensitive" } },
                 { barcode: query },
               ],
@@ -34,7 +35,9 @@ export async function GET(request: Request) {
       select: {
         id: true,
         name: true,
+        subName: true,
         sku: true,
+        hsnCode: true,
         purchasePrice: true,
         sellingPrice: true,
         trackSerials: true,

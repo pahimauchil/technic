@@ -28,6 +28,6 @@ export async function createSupplierAction(input: {
     });
 
     revalidatePath("/suppliers");
-    return { code: supplier.code };
+    return { code: supplier.code, id: supplier.id, name: supplier.name };
   });
 }

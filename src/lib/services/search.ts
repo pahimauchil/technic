@@ -35,13 +35,14 @@ export async function globalSearch(
         firmId,
         OR: [
           { name: contains },
+          { subName: contains },
           { sku: contains },
           { barcode: cleaned },
           { modelNumber: contains },
           { brand: { name: contains } },
         ],
       },
-      select: { id: true, name: true, sku: true, sellingPrice: true },
+      select: { id: true, name: true, subName: true, sku: true, sellingPrice: true },
       take,
     }),
     prisma.customer.findMany({
@@ -84,7 +85,7 @@ export async function globalSearch(
       kind: "product" as const,
       id: product.id,
       title: product.name,
-      subtitle: `SKU ${product.sku} · ₹${num(product.sellingPrice).toFixed(2)}`,
+      subtitle: `${product.subName ? `${product.subName} · ` : ""}SKU ${product.sku} · ₹${num(product.sellingPrice).toFixed(2)}`,
       href: `/products/${product.id}`,
     })),
     ...serialUnits.map((unit) => ({
@@ -161,6 +162,7 @@ export async function posLookup(firmId: string, branchId: string, code: string) 
     product: {
       id: product.id,
       name: product.name,
+      subName: product.subName,
       sku: product.sku,
       hsnCode: product.hsnCode,
       gstRate: num(product.gstRate),

@@ -12,6 +12,7 @@ import { WhatsAppShareButton } from "@/components/shared/whatsapp-share-button";
 import { CancelInvoiceButton } from "./cancel-invoice-button";
 import { RecordInvoicePaymentButton } from "./record-payment-button";
 import { SalesReturnButton } from "./sales-return-button";
+import { DispatchDetailsButton } from "./dispatch-details-button";
 import { getInvoiceForView } from "@/lib/services/sales";
 import { requirePermissionInFirm, taxModeWhere } from "@/lib/session";
 import { formatCurrency } from "@/lib/money";
@@ -79,6 +80,17 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 }))}
               />
             ) : null}
+            {invoice.status !== "CANCELLED" && user.permissions.includes("invoice.create") ? (
+              <DispatchDetailsButton
+                invoiceId={invoice.id}
+                initial={{
+                  dispatchThrough: invoice.dispatchThrough ?? "",
+                  vehicleNumber: invoice.vehicleNumber ?? "",
+                  ewayBillNumber: invoice.ewayBillNumber ?? "",
+                  buyerOrderNo: invoice.buyerOrderNo ?? "",
+                }}
+              />
+            ) : null}
             {canCancel ? <CancelInvoiceButton invoiceId={invoice.id} /> : null}
           </>
         }
@@ -122,6 +134,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                       <TableCell className="pl-4 numeric">{index + 1}</TableCell>
                       <TableCell>
                         <p className="font-medium">{line.description}</p>
+                        {line.product?.subName ? <p className="text-xs text-muted-foreground">{line.product.subName}</p> : null}
                         {line.serialNumbers ? (
                           <p className="text-xs text-muted-foreground">SN: {line.serialNumbers.split("\n").join(", ")}</p>
                         ) : null}
