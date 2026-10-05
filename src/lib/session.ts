@@ -47,10 +47,37 @@ export class AuthorizationError extends Error {
 }
 
 export class AuthenticationError extends Error {
-  constructor(message = "You must be signed in") {
+  constructor(message = "Your session has expired — please sign in again to continue (your data is safe)") {
     super(message);
     this.name = "AuthenticationError";
   }
+}
+
+/**
+ * Resolves a usable work branch inside `firmId`. The preferred branch is kept
+ * when it is active and belongs to the firm. Otherwise only global roles
+ * (who may work in any branch of the firm) fall back to the firm's first
+ * active branch — ordinary branch staff stay pinned to their own branch and
+ * get an explicit "ask an administrator" error from requireWriteBranch.
+ */
+async function resolveWorkBranch(
+  firmId: string,
+  preferredBranchId: string | null,
+  role: UserRole,
+): Promise<{ id: string; name: string; code: string } | null> {
+  if (preferredBranchId) {
+    const preferred = await prisma.branch.findFirst({
+      where: { id: preferredBranchId, firmId },
+      select: { id: true, name: true, code: true, isActive: true },
+    });
+    if (preferred && (preferred.isActive || !isGlobalRole(role))) return preferred;
+  }
+  if (!isGlobalRole(role)) return null;
+  return prisma.branch.findFirst({
+    where: { firmId, isActive: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, name: true, code: true },
+  });
 }
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
@@ -66,21 +93,58 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     if (!firm || firm.status !== "ACTIVE") return null;
   }
 
+  // The firm actually being operated in. A switchable user (platform admin /
+  // admin) keeps their chosen firm in the token; if that firm has since been
+  // deleted or deactivated we degrade to "no firm selected" (the Firms page
+  // lets them pick again) instead of ejecting them from the app.
+  let activeFirmId = session.user.activeFirmId ?? null;
+  let activeFirmName = session.user.activeFirmName ?? null;
+  if (activeFirmId) {
+    const active =
+      activeFirmId === firmId
+        ? { id: activeFirmId, name: activeFirmName, status: "ACTIVE" as const }
+        : await prisma.firm.findUnique({
+            where: { id: activeFirmId },
+            select: { id: true, name: true, status: true },
+          });
+    if (!active || active.status !== "ACTIVE") {
+      activeFirmId = null;
+      activeFirmName = null;
+    } else {
+      activeFirmName = active.name ?? activeFirmName;
+    }
+  }
+
+  // Self-heal the saved work location. The token's branch can point at a
+  // branch of a different firm (after switching firms or a token refresh) or
+  // at a deleted/deactivated branch; resolve a valid one for the active firm.
+  let branchId = session.user.branchId;
+  let branchName = session.user.branchName;
+  let branchCode = session.user.branchCode;
+  if (activeFirmId) {
+    const resolved = await resolveWorkBranch(activeFirmId, branchId, session.user.role);
+    if (resolved) {
+      branchId = resolved.id;
+      branchName = resolved.name;
+      branchCode = resolved.code;
+    }
+  }
+
   return {
     id: session.user.id,
     name: session.user.name ?? "",
     email: session.user.email ?? "",
     image: session.user.image,
     role: session.user.role,
-    branchId: session.user.branchId,
-    branchName: session.user.branchName,
-    branchCode: session.user.branchCode,
+    branchId,
+    branchName,
+    branchCode,
     employeeCode: session.user.employeeCode,
     permissions: session.user.permissions ?? [],
     firmId: session.user.firmId ?? null,
     firmName: session.user.firmName ?? null,
-    activeFirmId: session.user.activeFirmId ?? null,
-    activeFirmName: session.user.activeFirmName ?? null,
+    activeFirmId,
+    activeFirmName,
     accessView: session.user.accessView === "GST_ONLY" ? "GST_ONLY" : "COMBINED",
   };
 }
@@ -233,14 +297,23 @@ export async function requireWriteBranch(
       where: { id: branchId },
       select: { firmId: true },
     });
-    if (!branch || branch.firmId !== firmId) {
+    if (branch && branch.firmId === firmId) return branchId;
+    if (requestedBranchId) {
+      throw new AuthorizationError("That branch does not belong to your organization");
+    }
+    // Stale saved location: recover by using the firm's first active branch
+    // rather than forcing the user to sign out and back in.
+    const fallback = await prisma.branch.findFirst({
+      where: { firmId, isActive: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    if (!fallback) {
       throw new AuthorizationError(
-        requestedBranchId
-          ? "That branch does not belong to your organization"
-          : "Your saved work location is no longer valid — sign out and back in",
+        "This firm has no active branch yet — add one in Firms before creating records",
       );
     }
-    return branchId;
+    return fallback.id;
   }
 
   if (!user.branchId) {

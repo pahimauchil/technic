@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { PackagePlus, Plus, ShoppingCart, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/searchable-select";
 import { formatCurrency } from "@/lib/money";
 import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
+import { QuickAddProductDialog, QuickAddSupplierDialog, type QuickProduct, type QuickSupplier } from "@/components/shared/quick-add";
 import { createPurchaseOrderAction } from "./po-actions";
 
 interface SupplierOption {
@@ -35,6 +36,7 @@ interface SupplierOption {
 interface ProductOption {
   id: string;
   name: string;
+  subName?: string | null;
   sku: string;
   purchasePrice: number;
 }
@@ -60,6 +62,8 @@ export function NewPurchaseOrderButton() {
   const [expectedDate, setExpectedDate] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0" }]);
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [addSupplierOpen, setAddSupplierOpen] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const loadOptions = async () => {
@@ -82,7 +86,7 @@ export function NewPurchaseOrderButton() {
   }));
   const productOptions: SearchableOption[] = products.map((product) => ({
     value: product.id,
-    label: product.name,
+    label: product.subName ? `${product.name} — ${product.subName}` : product.name,
     hint: `${product.sku} · cost ${formatCurrency(product.purchasePrice)}`,
   }));
 
@@ -91,6 +95,21 @@ export function NewPurchaseOrderButton() {
 
   const addLine = () =>
     setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0" }]);
+
+  const onProductCreated = (created: QuickProduct) => {
+    setProducts((current) => [...current, { ...created }]);
+    setLines((current) => {
+      const target = current.find((line) => !line.productId);
+      const filled = { productId: created.id, unitPrice: String(created.purchasePrice) };
+      if (target) return current.map((line) => (line.key === target.key ? { ...line, ...filled } : line));
+      return [...current, { key: (lineKey += 1), quantity: "1", ...filled }];
+    });
+  };
+
+  const onSupplierCreated = (created: QuickSupplier) => {
+    setSuppliers((current) => [...current, { id: created.id, name: created.name }]);
+    setSupplierId(created.id);
+  };
 
   const submit = () => {
     startTransition(async () => {
@@ -148,7 +167,12 @@ export function NewPurchaseOrderButton() {
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Supplier *</Label>
+            <div className="flex items-center justify-between">
+              <Label>Supplier *</Label>
+              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setAddSupplierOpen(true)}>
+                <UserPlus className="size-3" /> Add supplier
+              </Button>
+            </div>
             <SearchableSelect
               ariaLabel="Supplier"
               options={supplierOptions}
@@ -224,9 +248,14 @@ export function NewPurchaseOrderButton() {
                 </div>
               );
             })}
-            <Button size="sm" variant="outline" onClick={addLine}>
-              <Plus /> Add item
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={addLine}>
+                <Plus /> Add item
+              </Button>
+              <Button size="sm" variant="outline" onClick={() => setAddProductOpen(true)}>
+                <PackagePlus /> Add Product
+              </Button>
+            </div>
           </div>
 
           {validLines.length > 0 ? (
@@ -265,6 +294,8 @@ export function NewPurchaseOrderButton() {
             <ShoppingCart /> {pending ? "Saving…" : "Create order"}
           </Button>
         </DialogFooter>
+        <QuickAddProductDialog open={addProductOpen} onOpenChange={setAddProductOpen} onCreated={onProductCreated} />
+        <QuickAddSupplierDialog open={addSupplierOpen} onOpenChange={setAddSupplierOpen} onCreated={onSupplierCreated} />
       </DialogContent>
     </Dialog>
   );

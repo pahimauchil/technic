@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, Plus, Trash2 } from "lucide-react";
+import { FileText, PackagePlus, Plus, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -31,11 +31,18 @@ import {
 } from "@/components/ui/select";
 import { formatCurrency } from "@/lib/money";
 import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
+import {
+  QuickAddCustomerDialog,
+  QuickAddProductDialog,
+  type QuickCustomer,
+  type QuickProduct,
+} from "@/components/shared/quick-add";
 import { createQuotationAction } from "./actions";
 
 interface ProductOption {
   id: string;
   name: string;
+  subName?: string | null;
   sku: string;
   sellingPrice: number;
   gstRate: number;
@@ -55,6 +62,8 @@ interface Line {
   quantity: string;
   /** Raw input text — kept as a string so the field can be cleared while editing. */
   unitPrice: string;
+  /** Raw input text — line discount percentage. */
+  discount: string;
   trackSerials: boolean;
   serials: string[];
 }
@@ -76,7 +85,11 @@ export function NewQuotationButton({
   const [customerId, setCustomerId] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [notes, setNotes] = useState("");
-  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
+  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0", discount: "0", trackSerials: false, serials: [] }]);
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  /** The line the product was requested from, so the new product lands there. */
+  const [addProductForLine, setAddProductForLine] = useState<number | null>(null);
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -104,7 +117,7 @@ export function NewQuotationButton({
   }));
   const productOptions: SearchableOption[] = products.map((product) => ({
     value: product.id,
-    label: product.name,
+    label: product.subName ? `${product.name} — ${product.subName}` : product.name,
     hint: `${product.sku} · ${formatCurrency(product.sellingPrice)}`,
   }));
 
@@ -112,7 +125,34 @@ export function NewQuotationButton({
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...updates } : line)));
 
   const addLine = () =>
-    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
+    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", discount: "0", trackSerials: false, serials: [] }]);
+
+  /** A product created from inside this dialog: select it without leaving or resetting anything. */
+  const onProductCreated = (created: QuickProduct) => {
+    setProducts((current) => [...current, { ...created }]);
+    setLines((current) => {
+      const target =
+        current.find((line) => line.key === addProductForLine && !line.productId) ??
+        current.find((line) => !line.productId);
+      const filled: Partial<Line> = {
+        productId: created.id,
+        unitPrice: String(created.sellingPrice),
+        trackSerials: created.trackSerials,
+        serials: created.trackSerials ? [""] : [],
+      };
+      if (target) return current.map((line) => (line.key === target.key ? { ...line, ...filled } : line));
+      return [
+        ...current,
+        { key: (lineKey += 1), quantity: "1", discount: "0", ...filled } as Line,
+      ];
+    });
+    setAddProductForLine(null);
+  };
+
+  const onCustomerCreated = (created: QuickCustomer) => {
+    setCustomers((current) => [...current, { id: created.id, name: created.name, phone: created.phone }]);
+    setCustomerId(created.id);
+  };
 
   const submit = () => {
     startTransition(async () => {
@@ -129,6 +169,7 @@ export function NewQuotationButton({
               productId: line.productId,
               quantity: parseNumericInput(line.quantity),
               unitPrice: parseNumericInput(line.unitPrice),
+              discountPercent: parseNumericInput(line.discount) || 0,
               gstRate: product?.gstRate ?? 18,
               serialNumbers: line.trackSerials ? line.serials : undefined,
             };
@@ -137,7 +178,7 @@ export function NewQuotationButton({
       if (result.ok) {
         toast.success(`Quotation ${result.data.quotationNumber} created`);
         setOpen(false);
-        setLines([{ key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
+        setLines([{ key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", discount: "0", trackSerials: false, serials: [] }]);
         setCustomerId("");
         setValidUntil("");
         setNotes("");
@@ -150,7 +191,11 @@ export function NewQuotationButton({
 
   const validLines = lines.filter((line) => line.productId);
   const total = validLines.reduce(
-    (sum, line) => sum + parseNumericInput(line.quantity) * parseNumericInput(line.unitPrice),
+    (sum, line) =>
+      sum +
+      parseNumericInput(line.quantity) *
+        parseNumericInput(line.unitPrice) *
+        (1 - Math.min(100, parseNumericInput(line.discount) || 0) / 100),
     0,
   );
 
@@ -170,7 +215,12 @@ export function NewQuotationButton({
         </DialogHeader>
         <div className="space-y-3">
           <div className="space-y-1.5">
-            <Label>Customer *</Label>
+            <div className="flex items-center justify-between">
+              <Label>Customer *</Label>
+              <Button type="button" size="sm" variant="ghost" className="h-6 px-2 text-xs" onClick={() => setAddCustomerOpen(true)}>
+                <UserPlus className="size-3" /> Add customer
+              </Button>
+            </div>
             <SearchableSelect
               ariaLabel="Customer"
               options={customerOptions}
@@ -218,7 +268,7 @@ export function NewQuotationButton({
                         });
                       }}
                       placeholder="Search product…"
-                      emptyMessage="No products match"
+                      emptyMessage="No products match — use Add Product"
                     />
                     <Button
                       size="icon-sm"
@@ -262,8 +312,25 @@ export function NewQuotationButton({
                         aria-label="Rate"
                       />
                     </div>
+                    <div className="w-20">
+                      <Label className="text-xs text-muted-foreground">Disc %</Label>
+                      <Input
+                        className="numeric h-8"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={line.discount}
+                        onChange={(e) => setLine(line.key, { discount: e.target.value })}
+                        aria-label="Discount percent"
+                      />
+                    </div>
                     <span className="numeric ml-auto pt-5 text-sm font-semibold">
-                      {formatCurrency(parseNumericInput(line.quantity) * parseNumericInput(line.unitPrice))}
+                      {formatCurrency(
+                        parseNumericInput(line.quantity) *
+                          parseNumericInput(line.unitPrice) *
+                          (1 - Math.min(100, parseNumericInput(line.discount) || 0) / 100),
+                      )}
                     </span>
                   </div>
                   {line.trackSerials ? (
@@ -286,9 +353,21 @@ export function NewQuotationButton({
                 </div>
               );
             })}
-            <Button size="sm" variant="outline" onClick={addLine}>
-              <Plus /> Add item
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" onClick={addLine}>
+                <Plus /> Add item
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setAddProductForLine(lines.find((l) => !l.productId)?.key ?? null);
+                  setAddProductOpen(true);
+                }}
+              >
+                <PackagePlus /> Add Product
+              </Button>
+            </div>
           </div>
 
           {validLines.length > 0 ? (
@@ -327,6 +406,8 @@ export function NewQuotationButton({
             {pending ? "Saving…" : "Create quotation"}
           </Button>
         </DialogFooter>
+        <QuickAddProductDialog open={addProductOpen} onOpenChange={setAddProductOpen} onCreated={onProductCreated} />
+        <QuickAddCustomerDialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen} onCreated={onCustomerCreated} />
       </DialogContent>
     </Dialog>
   );

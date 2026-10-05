@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { runAction, BusinessRuleError, AccessModeError } from "@/lib/action-result";
-import { authorize, requireFirmId } from "@/lib/session";
+import { authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
 import { canBillGst } from "@/lib/access-mode";
 import { createInvoice, type SaleLineInput } from "@/lib/services/sales";
 
@@ -47,7 +47,7 @@ export async function checkoutAction(input: CheckoutInput) {
 
     const invoice = await createInvoice({
       firmId,
-      branchId: user.branchId ?? "",
+      branchId: await requireWriteBranch(user, null),
       customerId: input.customerId,
       taxMode: mode,
       lines: input.lines as SaleLineInput[],

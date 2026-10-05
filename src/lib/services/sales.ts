@@ -542,33 +542,34 @@ async function previewInvoiceTotal(input: InvoiceInput): Promise<number> {
   return summary.totalAmount;
 }
 
-/** Outstanding = billed − received, including opening balances. */
+/**
+ * Outstanding = the customer-ledger closing balance (opening + invoices +
+ * refunds + debit adjustments − receipts − returns − credit adjustments).
+ * The balance itself comes from the shared ledger engine so this rollup,
+ * the Customer Ledger, reports and the dashboard can never disagree.
+ */
 export async function recalcCustomerRollup(
   tx: { customer: { findUnique: Function; update: Function } },
   firmId: string,
   customerId: string,
 ): Promise<void> {
+  const { customerBalance } = await import("@/lib/services/ledger");
   const customer = await tx.customer.findUnique({
     where: { id: customerId },
-    include: {
-      invoices: { where: { firmId, status: { not: "CANCELLED" } }, select: { totalAmount: true } },
-      payments: { where: { firmId, direction: "CUSTOMER_IN" }, select: { amount: true } },
-      salesReturns: { where: { firmId, status: "APPROVED" }, select: { totalAmount: true } },
-    },
+    include: { invoices: { where: { firmId, status: { not: "CANCELLED" } }, select: { totalAmount: true } } },
   });
   if (!customer) return;
 
   const totalBilled = customer.invoices.reduce((sum: number, inv: { totalAmount: unknown }) => sum + Number(inv.totalAmount), 0);
-  const paid = customer.payments.reduce((sum: number, pay: { amount: unknown }) => sum + Number(pay.amount), 0);
-  const returned = customer.salesReturns.reduce((sum: number, ret: { totalAmount: unknown }) => sum + Number(ret.totalAmount), 0);
-  const outstanding = Math.max(0, round2(totalBilled - paid - returned + Number(customer.openingBalance)));
+  const balance = await customerBalance(tx as never, firmId, customerId);
 
   await tx.customer.update({
     where: { id: customerId },
     data: {
       invoiceCount: customer.invoices.length,
       totalBilled: round2(totalBilled),
-      outstandingAmount: outstanding,
+      // A customer in credit (advance) shows no receivable.
+      outstandingAmount: Math.max(0, balance),
       lastInvoiceAt: customer.invoices.length > 0 ? new Date() : undefined,
     },
   });
@@ -662,7 +663,7 @@ export async function getInvoiceForView(
       branch: true,
       lines: {
         include: {
-          product: { select: { name: true, sku: true, hsnCode: true } },
+          product: { select: { name: true, subName: true, sku: true, hsnCode: true } },
           variant: { select: { name: true, sku: true } },
         },
       },
@@ -688,7 +689,7 @@ export async function getQuotationForView(
       branch: true,
       lines: {
         include: {
-          product: { select: { name: true, sku: true, hsnCode: true } },
+          product: { select: { name: true, subName: true, sku: true, hsnCode: true } },
           variant: { select: { name: true, sku: true } },
         },
       },
@@ -711,7 +712,7 @@ export async function getSalesOrderForView(
       branch: true,
       lines: {
         include: {
-          product: { select: { name: true, sku: true, hsnCode: true } },
+          product: { select: { name: true, subName: true, sku: true, hsnCode: true } },
           variant: { select: { name: true, sku: true } },
         },
       },

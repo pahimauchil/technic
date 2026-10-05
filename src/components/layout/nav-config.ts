@@ -1,6 +1,7 @@
 import {
   ArrowLeftRight,
   BadgePercent,
+  BookOpen,
   Boxes,
   ClipboardList,
   FileBarChart,
@@ -187,6 +188,12 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/warranty",
         icon: ShieldCheck,
         permissions: [PERMISSIONS.WARRANTY_VIEW],
+      },
+      {
+        label: "Ledgers",
+        href: "/ledgers",
+        icon: BookOpen,
+        permissions: [PERMISSIONS.REPORTS_VIEW, PERMISSIONS.PAYMENTS_VIEW],
       },
       {
         label: "Reports",

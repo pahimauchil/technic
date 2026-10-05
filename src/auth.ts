@@ -107,9 +107,13 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         });
         if (fresh && fresh.status === "ACTIVE") {
           token.role = fresh.role;
-          token.branchId = fresh.branchId;
-          token.branchName = fresh.branch?.name ?? null;
-          token.branchCode = fresh.branch?.code ?? null;
+          // Keep the work branch chosen for the active firm; only fall back to
+          // the account's own branch when no other firm is being operated in.
+          if (!token.activeFirmId || token.activeFirmId === fresh.firmId) {
+            token.branchId = fresh.branchId;
+            token.branchName = fresh.branch?.name ?? null;
+            token.branchCode = fresh.branch?.code ?? null;
+          }
           token.permissions = await resolvePermissions(fresh.id, fresh.role);
           token.firmId = fresh.firmId;
           token.firmName = fresh.firm?.name ?? null;

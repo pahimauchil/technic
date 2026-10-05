@@ -13,6 +13,8 @@ import { recordAudit } from "@/lib/audit";
 export interface ProductInput {
   firmId: string;
   name: string;
+  /** Model / variant line shown under the name on documents. */
+  subName?: string | null;
   sku: string;
   brandId?: string | null;
   categoryId?: string | null;
@@ -80,6 +82,7 @@ export async function createProduct(input: ProductInput) {
       data: {
         firmId: input.firmId,
         name: input.name.trim(),
+        subName: input.subName?.trim() || null,
         sku: input.sku.trim().toUpperCase(),
         brandId: input.brandId ?? null,
         categoryId: input.categoryId ?? null,
@@ -179,6 +182,7 @@ export async function updateProduct(firmId: string, productId: string, input: Pr
       where: { id: productId },
       data: {
         name: input.name.trim(),
+        subName: input.subName?.trim() || null,
         sku: input.sku.trim().toUpperCase(),
         brandId: input.brandId ?? null,
         categoryId: input.categoryId ?? null,

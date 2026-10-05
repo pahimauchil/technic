@@ -11,6 +11,7 @@ import {
   type PDFTableRow,
   type SummaryLine,
 } from "./pdf-builder";
+import { renderSalesDocument } from "./sales-document";
 
 /**
  * Technic Technologies document templates. One generator per business
@@ -65,6 +66,7 @@ type Numericish = number | string | { toNumber: () => number };
 
 interface LineLike {
   description: string;
+  product?: { subName?: string | null } | null;
   hsnCode?: string | null;
   serialNumbers?: string[] | string | null;
   quantity: Numericish;
@@ -101,7 +103,7 @@ function invoiceTableRows(lines: LineLike[], withTaxColumns: boolean) {
     const amount = formatCurrency(lineTotal);
     const base: PDFTableRow = {
       sl: idx + 1,
-      item: `${line.description}${serials}`,
+      item: `${line.description}${line.product?.subName ? `\n${line.product.subName}` : ""}${serials}`,
       hsn: line.hsnCode || "—",
       qty,
       rate,
@@ -151,8 +153,59 @@ function simpleInvoiceColumns(): PDFTableColumn[] {
 }
 
 // ---------------------------------------------------------------------------
-// Sales invoice: TAX_INVOICE (GST) or NON_GST_BILL
+// Sales invoice (Tax Invoice / Non-Tax Invoice) and Quotation — one shared
+// bordered A4 layout, see ./sales-document.ts
 // ---------------------------------------------------------------------------
+
+interface SalesLineSource {
+  description: string;
+  hsnCode?: string | null;
+  serialNumbers?: string[] | string | null;
+  quantity: number;
+  unitPrice: Numericish;
+  discountPercent: Numericish;
+  gstRate: Numericish;
+  taxableValue?: Numericish | null;
+  lineTotal: Numericish;
+  product?: { name: string; subName: string | null } | null;
+}
+
+/**
+ * Maps saved lines to document lines. On GST documents the stored unit price
+ * is the GST-inclusive shelf price, so the printed Rate is shown ex-tax and
+ * the Taxable Value column carries the discounted, tax-exclusive amount.
+ */
+function salesDocLines(lines: SalesLineSource[], isGst: boolean) {
+  let discountExTax = 0;
+  const mapped = lines.map((line) => {
+    const gst = isGst ? num(line.gstRate as number) : 0;
+    const unit = num(line.unitPrice as number);
+    const qty = line.quantity;
+    const disc = num(line.discountPercent as number);
+    const lineTotal = num(line.lineTotal as number);
+    const rateExTax = gst > 0 ? unit / (1 + gst / 100) : unit;
+    const taxable = line.taxableValue != null ? num(line.taxableValue as number) : gst > 0 ? lineTotal / (1 + gst / 100) : lineTotal;
+    discountExTax += rateExTax * qty * (disc / 100);
+    const serials = Array.isArray(line.serialNumbers)
+      ? line.serialNumbers
+      : (line.serialNumbers ?? "").split("\n");
+    // Prefer the live product name/sub name; fall back to the saved snapshot.
+    const name = line.product?.name ?? line.description;
+    return {
+      name,
+      subName: line.product?.subName ?? null,
+      serials: serials.filter(Boolean),
+      hsn: line.hsnCode,
+      quantity: qty,
+      rate: rateExTax,
+      discountPercent: disc,
+      taxable,
+      gstRate: gst,
+      amount: lineTotal,
+    };
+  });
+  return { lines: mapped, discountExTax };
+}
 
 export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: Buffer; fileName: string }> {
   const invoice = await prisma.invoice.findUnique({
@@ -160,7 +213,7 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
     include: {
       customer: true,
       branch: true,
-      lines: true,
+      lines: { include: { product: { select: { name: true, subName: true } } } },
       createdBy: { select: { name: true } },
       salesOrder: { select: { orderNumber: true } },
       quotation: { select: { quotationNumber: true } },
@@ -169,101 +222,69 @@ export async function generateInvoicePDF(invoiceId: string): Promise<{ buffer: B
 
   if (!invoice) throw new Error(`Invoice #${invoiceId} not found.`);
 
-  const isTaxInvoice = invoice.kind === "TAX_INVOICE";
+  const isGst = invoice.kind === "TAX_INVOICE";
   const company = await getCompanyProfile(invoice.firmId);
-  const builder = new PDFDocumentBuilder(company);
+  const { lines, discountExTax } = salesDocLines(invoice.lines, isGst);
 
-  builder.renderCompanyHeader(branchProfile(invoice.branch));
-  builder.renderDocumentTitle(isTaxInvoice ? "Tax Invoice" : "Non-Tax Invoice");
-
-  const placeOfSupply = invoice.placeOfSupply || invoice.customer?.state || "—";
-
-  builder.renderInfoColumns([
-    {
-      heading: "Bill To",
-      lines: [
-        invoice.billToName,
-        ...(invoice.billToAddress ? [invoice.billToAddress] : []),
-        ...(invoice.billToGstin ? [`GSTIN: ${invoice.billToGstin}`] : []),
-        `Ph: ${invoice.billToPhone || "—"}`,
-      ],
-    },
-    {
-      heading: "Invoice Details",
-      lines: [
-        invoice.invoiceNumber,
-        `Date: ${formatDate(invoice.invoiceDate)}`,
-        `Place of Supply: ${placeOfSupply}`,
-        ...(invoice.salesOrder ? [`SO: ${invoice.salesOrder.orderNumber}`] : []),
-        ...(invoice.quotation ? [`Quote: ${invoice.quotation.quotationNumber}`] : []),
-      ],
-    },
-    {
-      heading: isTaxInvoice ? "Tax Details" : "Details",
-      lines: isTaxInvoice
-        ? [
-            `Mode: Intra-state (CGST+SGST)`,
-            `vs Inter-state (IGST)`,
-            `Supplier: ${company.name}`,
-          ]
-        : [`Supplier: ${company.name}`],
-    },
-  ]);
-
-  const { rows, totalQty } = invoiceTableRows(invoice.lines, isTaxInvoice);
-
-  const totals: TaxTotals = {
-    taxableAmount: num(invoice.taxableAmount),
-    cgstAmount: num(invoice.cgstAmount),
-    sgstAmount: num(invoice.sgstAmount),
-    igstAmount: num(invoice.igstAmount),
+  const taxable = num(invoice.taxableAmount);
+  const totals = {
+    // GST documents print ex-tax figures: gross = taxable value + discount.
+    gross: isGst ? taxable + discountExTax : num(invoice.subtotal),
+    discount: isGst ? discountExTax : num(invoice.discountAmount),
+    taxable,
+    cgst: num(invoice.cgstAmount),
+    sgst: num(invoice.sgstAmount),
+    igst: num(invoice.igstAmount),
+    roundOff: num(invoice.roundOff),
+    total: num(invoice.totalAmount),
+    received: num(invoice.amountPaid),
+    due: num(invoice.amountDue),
   };
 
-  const totalRow: PDFTableRow = isTaxInvoice
-    ? { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", disc: "", taxable: formatCurrency(totals.taxableAmount), gst: formatCurrency(totals.cgstAmount + totals.sgstAmount + totals.igstAmount), amount: formatCurrency(invoice.totalAmount) }
-    : { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", amount: formatCurrency(invoice.totalAmount) };
+  const toLines = [
+    ...(invoice.billToAddress ? [invoice.billToAddress] : []),
+    ...(invoice.billToGstin ? [`GSTIN: ${invoice.billToGstin}`] : []),
+    ...(invoice.billToPhone ? [`Ph: ${invoice.billToPhone}`] : []),
+  ];
 
-  builder.renderItemsTable(
-    isTaxInvoice ? taxInvoiceColumns() : simpleInvoiceColumns(),
-    rows,
-    totalRow,
+  const buffer = await renderSalesDocument(
+    {
+      title: isGst ? "TAX INVOICE" : "INVOICE",
+      titleNote: "ORIGINAL FOR RECIPIENT",
+      isGst,
+      company,
+      branch: branchProfile(invoice.branch),
+      meta: [
+        ["Invoice No.", invoice.invoiceNumber],
+        ["Date", formatDate(invoice.invoiceDate)],
+        ["Type", isGst ? "Tax Invoice" : "Non-Tax Invoice"],
+        ["Place of Supply", invoice.placeOfSupply || invoice.customer?.state || "—"],
+        ["Due Date", invoice.dueDate ? formatDate(invoice.dueDate) : "—"],
+        ...(invoice.quotation ? ([["Quotation Ref.", invoice.quotation.quotationNumber]] as [string, string][]) : []),
+        ...(invoice.salesOrder ? ([["Sales Order", invoice.salesOrder.orderNumber]] as [string, string][]) : []),
+      ],
+      to: { name: invoice.billToName, lines: toLines },
+      sideHeading: "Dispatch & E-Way Details",
+      side: [
+        ["Dispatched Through", invoice.dispatchThrough || "—"],
+        ["Vehicle No.", invoice.vehicleNumber || "—"],
+        ["E-Way Bill No.", invoice.ewayBillNumber || "—"],
+        ["Buyer's Order No.", invoice.buyerOrderNo || "—"],
+      ],
+      lines,
+      totals,
+      totalLabel: "Final Bill Amount",
+      bankDetails: company.bankDetails || undefined,
+      terms: invoice.terms || company.termsConditions,
+      notes: invoice.notes,
+      signatoryFor: company.name,
+      preparedBy: invoice.createdBy?.name,
+      cancelledReason: invoice.status === "CANCELLED" ? invoice.cancellationReason || "Cancelled" : null,
+    },
+    `${isGst ? "Tax Invoice" : "Invoice"} ${invoice.invoiceNumber}`,
   );
 
-  const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(invoice.subtotal) }];
-  if (num(invoice.discountAmount) > 0) {
-    summaryLines.push({ label: "Discount", value: `-${formatCurrency(invoice.discountAmount)}` });
-  }
-  if (isTaxInvoice) {
-    summaryLines.push({ label: "Taxable Value", value: formatCurrency(totals.taxableAmount) });
-    if (totals.cgstAmount > 0) summaryLines.push({ label: "CGST", value: formatCurrency(totals.cgstAmount) });
-    if (totals.sgstAmount > 0) summaryLines.push({ label: "SGST", value: formatCurrency(totals.sgstAmount) });
-    if (totals.igstAmount > 0) summaryLines.push({ label: "IGST", value: formatCurrency(totals.igstAmount) });
-    if (num(invoice.roundOff) !== 0) {
-      summaryLines.push({ label: "Round Off", value: formatCurrency(invoice.roundOff) });
-    }
-  }
-  summaryLines.push(
-    { label: "TOTAL", value: formatCurrency(invoice.totalAmount), highlight: true },
-    { label: "Received", value: formatCurrency(invoice.amountPaid) },
-    { label: "Balance Due", value: formatCurrency(invoice.amountDue), bold: true },
-  );
-
-  builder.renderFinancialSummary({
-    amountWordsLabel: "Amount In Words",
-    amountWords: amountInWords(invoice.totalAmount),
-    terms: invoice.terms || company.termsConditions,
-    lines: summaryLines,
-    bankDetails: company.bankDetails || undefined,
-  });
-
-  if (invoice.status === "CANCELLED") {
-    builder.renderCancelledStamp(invoice.cancellationReason || "This invoice has been cancelled");
-  }
-
-  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: invoice.createdBy?.name }]);
-
-  const buffer = await builder.build();
-  const kindLabel = isTaxInvoice ? "Tax-Invoice" : "Non-Tax-Invoice";
+  const kindLabel = isGst ? "Tax-Invoice" : "Invoice";
   return { buffer, fileName: `TECHNIC-${kindLabel}-${invoice.invoiceNumber.replace(/\//g, "-")}.pdf` };
 }
 
@@ -277,67 +298,70 @@ export async function generateQuotationPDF(quotationId: string): Promise<{ buffe
     include: {
       customer: true,
       branch: true,
-      lines: true,
+      lines: { include: { product: { select: { name: true, subName: true } } } },
       createdBy: { select: { name: true } },
     },
   });
 
   if (!quotation) throw new Error(`Quotation #${quotationId} not found.`);
 
-  const company = await getCompanyProfile(quotation.firmId);
-  const builder = new PDFDocumentBuilder(company);
-
-  builder.renderCompanyHeader(branchProfile(quotation.branch));
-  builder.renderDocumentTitle("Quotation");
-
-  builder.renderInfoColumns([
-    {
-      heading: "Quotation For",
-      lines: [
-        quotation.customer.name,
-        `Ph: ${quotation.customer.phone}`,
-        ...(quotation.customer.gstin ? [`GSTIN: ${quotation.customer.gstin}`] : []),
-      ],
-    },
-    {
-      heading: "Quotation Details",
-      lines: [
-        quotation.quotationNumber,
-        `Date: ${formatDate(quotation.quotationDate)}`,
-        ...(quotation.validUntil ? [`Valid Until: ${formatDate(quotation.validUntil)}`] : []),
-        `Status: ${quotation.status}`,
-      ],
-    },
-  ]);
-
   const isGst = quotation.taxMode === "GST";
-  const { rows, totalQty } = invoiceTableRows(quotation.lines, isGst);
+  const company = await getCompanyProfile(quotation.firmId);
+  const { lines, discountExTax } = salesDocLines(quotation.lines, isGst);
 
-  builder.renderItemsTable(
-    isGst ? taxInvoiceColumns() : simpleInvoiceColumns(),
-    rows,
-    isGst
-      ? { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", disc: "", taxable: formatCurrency(quotation.taxableAmount), gst: formatCurrency(num(quotation.cgstAmount) + num(quotation.sgstAmount) + num(quotation.igstAmount)), amount: formatCurrency(quotation.totalAmount) }
-      : { sl: "", item: "TOTAL", hsn: "", qty: totalQty, rate: "", amount: formatCurrency(quotation.totalAmount) },
+  const taxable = lines.reduce((sum, line) => sum + line.taxable, 0);
+  const totals = {
+    gross: isGst ? taxable + discountExTax : num(quotation.subtotal),
+    discount: isGst ? discountExTax : num(quotation.discountAmount),
+    taxable: isGst ? num(quotation.taxableAmount) || taxable : num(quotation.taxableAmount),
+    cgst: num(quotation.cgstAmount),
+    sgst: num(quotation.sgstAmount),
+    igst: num(quotation.igstAmount),
+    roundOff: 0,
+    total: num(quotation.totalAmount),
+  };
+
+  const customer = quotation.customer;
+  const buffer = await renderSalesDocument(
+    {
+      title: "QUOTATION",
+      isGst,
+      company,
+      branch: branchProfile(quotation.branch),
+      meta: [
+        ["Quotation No.", quotation.quotationNumber],
+        ["Date", formatDate(quotation.quotationDate)],
+        ["Type", isGst ? "GST (Tax)" : "Non-GST"],
+        ["Valid Until", quotation.validUntil ? formatDate(quotation.validUntil) : "—"],
+      ],
+      toHeading: "Quotation For",
+      to: {
+        name: customer.name,
+        lines: [
+          ...([customer.addressLine, customer.city, customer.state, customer.pincode].filter(Boolean).length
+            ? [[customer.addressLine, customer.city, customer.state, customer.pincode].filter(Boolean).join(", ")]
+            : []),
+          ...(customer.gstin ? [`GSTIN: ${customer.gstin}`] : []),
+          `Ph: ${customer.phone}`,
+        ],
+      },
+      sideHeading: "Quotation Details",
+      side: [
+        ["Status", quotation.status],
+        ["Prepared By", quotation.createdBy?.name || "—"],
+      ],
+      lines,
+      totals,
+      totalLabel: "Quotation Total",
+      bankDetails: company.bankDetails || undefined,
+      terms: quotation.terms || company.termsConditions,
+      notes: quotation.notes,
+      signatoryFor: company.name,
+      preparedBy: quotation.createdBy?.name,
+    },
+    `Quotation ${quotation.quotationNumber}`,
   );
 
-  const summaryLines: SummaryLine[] = [{ label: "Sub Total", value: formatCurrency(quotation.subtotal) }];
-  if (num(quotation.discountAmount) > 0) {
-    summaryLines.push({ label: "Discount", value: `-${formatCurrency(quotation.discountAmount)}` });
-  }
-  summaryLines.push({ label: "TOTAL", value: formatCurrency(quotation.totalAmount), highlight: true });
-
-  builder.renderFinancialSummary({
-    amountWordsLabel: "Amount In Words",
-    amountWords: amountInWords(quotation.totalAmount),
-    terms: quotation.terms || company.termsConditions,
-    lines: summaryLines,
-    bankDetails: company.bankDetails || undefined,
-  });
-
-  builder.renderSignatureBlock([{ title: `For ${company.name}`, name: quotation.createdBy?.name }]);
-
-  const buffer = await builder.build();
   return { buffer, fileName: `TECHNIC-Quotation-${quotation.quotationNumber.replace(/\//g, "-")}.pdf` };
 }
 
@@ -351,7 +375,7 @@ export async function generatePurchaseOrderPDF(poId: string): Promise<{ buffer: 
     include: {
       supplier: true,
       branch: true,
-      items: true,
+      items: { include: { product: { select: { subName: true } } } },
       createdBy: { select: { name: true } },
     },
   });
@@ -448,7 +472,7 @@ export async function generatePurchaseInvoicePDF(invoiceId: string): Promise<{ b
     include: {
       supplier: true,
       branch: true,
-      lines: true,
+      lines: { include: { product: { select: { subName: true } } } },
       po: { select: { poNumber: true } },
       createdBy: { select: { name: true } },
     },
@@ -747,4 +771,67 @@ export async function generatePurchaseReturnPDF(returnId: string): Promise<{ buf
 
   const buffer = await builder.build();
   return { buffer, fileName: `TECHNIC-Purchase-Return-${purchaseReturn.returnNumber.replace(/\//g, "-")}.pdf` };
+}
+
+// ---------------------------------------------------------------------------
+// Ledger statement (any ledger, same shared engine as the on-screen view)
+// ---------------------------------------------------------------------------
+
+export async function generateLedgerPDF(
+  firmId: string,
+  ledger: import("@/lib/ledger/types").LedgerResult,
+): Promise<{ buffer: Buffer; fileName: string }> {
+  const company = await getCompanyProfile(firmId);
+  const builder = new PDFDocumentBuilder(company);
+  const isQty = ledger.unit === "qty";
+  const fmt = (value: number) => (isQty ? String(value) : formatCurrency(value));
+
+  builder.renderCompanyHeader(branchProfile(null));
+  builder.renderDocumentTitle(ledger.title);
+  builder.renderInfoColumns([
+    {
+      heading: ledger.subject ? "Account" : "Ledger",
+      lines: [ledger.subject ?? ledger.title],
+    },
+    {
+      heading: "Period",
+      lines: [
+        `${ledger.from ? formatDate(ledger.from) : "Beginning"} to ${ledger.to ? formatDate(ledger.to) : "Today"}`,
+        `Printed: ${formatDate(new Date())}`,
+      ],
+    },
+  ]);
+
+  const rows: PDFTableRow[] = ledger.rows.map((row) => ({
+    date: row.date ? formatDate(row.date) : "",
+    description: row.particulars,
+    ref: row.reference,
+    debit: row.debit ? fmt(row.debit) : "",
+    credit: row.credit ? fmt(row.credit) : "",
+    balance: `${fmt(Math.abs(row.balance))} ${row.side}`,
+  }));
+
+  builder.renderItemsTable(
+    [
+      { id: "date", header: "Date", width: 12 },
+      { id: "description", header: "Particulars", width: 34 },
+      { id: "ref", header: "Reference", width: 16 },
+      { id: "debit", header: ledger.debitLabel, width: 12, align: "right" },
+      { id: "credit", header: ledger.creditLabel, width: 12, align: "right" },
+      { id: "balance", header: "Balance", width: 14, align: "right" },
+    ],
+    rows,
+    {
+      date: "",
+      description: "TOTAL",
+      ref: "",
+      debit: fmt(ledger.totalDebit),
+      credit: fmt(ledger.totalCredit),
+      balance: `${fmt(Math.abs(ledger.closingBalance))} ${ledger.closingSide}`,
+    },
+  );
+
+  const buffer = await builder.build();
+  const slug = ledger.title.replace(/[^A-Za-z0-9]+/g, "-");
+  return { buffer, fileName: `TECHNIC-${slug}.pdf` };
 }

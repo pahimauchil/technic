@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { Barcode, Minus, Plus, ScanLine, Search, Trash2 } from "lucide-react";
+import { Barcode, Minus, PackagePlus, Plus, ScanLine, Search, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { Separator } from "@/components/ui/separator";
+import { QuickAddCustomerDialog, QuickAddProductDialog, type QuickCustomer, type QuickProduct } from "@/components/shared/quick-add";
 import { checkoutAction } from "./actions";
 import { formatCurrency } from "@/lib/money";
 import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
@@ -20,6 +21,7 @@ import { cn } from "@/lib/utils";
 interface PosProduct {
   id: string;
   name: string;
+  subName?: string | null;
   sku: string;
   barcode: string | null;
   hsnCode: string | null;
@@ -49,6 +51,8 @@ interface CartLine {
   quantity: string;
   /** Raw input text — kept as a string so the field can be cleared while editing. */
   unitPrice: string;
+  /** Raw input text — line discount percentage. */
+  discount: string;
   gstRate: number;
   trackSerials: boolean;
   serials: string[];
@@ -56,8 +60,8 @@ interface CartLine {
 
 export function PosTerminal({
   mode: initialMode,
-  products,
-  customers,
+  products: initialProducts,
+  customers: initialCustomers,
   canCollectPayment,
   canSwitchMode,
 }: {
@@ -70,6 +74,10 @@ export function PosTerminal({
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"GST" | "NON_GST">(initialMode);
+  const [products, setProducts] = useState<PosProduct[]>(initialProducts);
+  const [customers, setCustomers] = useState<PosCustomer[]>(initialCustomers);
+  const [addProductOpen, setAddProductOpen] = useState(false);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
@@ -84,6 +92,7 @@ export function PosTerminal({
       .filter(
         (product) =>
           product.name.toLowerCase().includes(cleaned) ||
+          (product.subName ?? "").toLowerCase().includes(cleaned) ||
           product.sku.toLowerCase().includes(cleaned) ||
           product.barcode === query.trim(),
       )
@@ -108,15 +117,44 @@ export function PosTerminal({
           key,
           productId: product.id,
           variantId: variantId ?? null,
-          name: variant ? `${product.name} — ${variant.name}` : product.name,
+          name: [variant ? `${product.name} — ${variant.name}` : product.name, product.subName].filter(Boolean).join(" · "),
           quantity: "1",
           unitPrice: String(variant?.sellingPrice ?? product.sellingPrice),
+          discount: "0",
           gstRate: product.gstRate,
           trackSerials: product.trackSerials,
           serials: Array.from({ length: 1 }, () => ""),
         },
       ];
     });
+  };
+
+  /** Product created from the POS screen: add it to the catalogue and the cart, cart untouched otherwise. */
+  const onProductCreated = (created: QuickProduct) => {
+    const product: PosProduct = {
+      id: created.id,
+      name: created.name,
+      subName: created.subName,
+      sku: created.sku,
+      barcode: null,
+      hsnCode: created.hsnCode,
+      gstRate: created.gstRate,
+      sellingPrice: created.sellingPrice,
+      trackSerials: created.trackSerials,
+      trackImei: false,
+      brand: null,
+      variants: [],
+    };
+    setProducts((current) => [product, ...current]);
+    addToCart(product);
+  };
+
+  const onCustomerCreated = (created: QuickCustomer) => {
+    setCustomers((current) => [
+      ...current,
+      { id: created.id, code: created.code, name: created.name, phone: created.phone, gstin: created.gstin, state: created.state },
+    ]);
+    setCustomerId(created.id);
   };
 
   const customerOptions: SearchableOption[] = customers.map((customer) => ({
@@ -131,7 +169,10 @@ export function PosTerminal({
     let cgst = 0;
     let sgst = 0;
     for (const line of cart) {
-      const gross = parseNumericInput(line.unitPrice) * parseNumericInput(line.quantity);
+      const gross =
+        parseNumericInput(line.unitPrice) *
+        parseNumericInput(line.quantity) *
+        (1 - Math.min(100, parseNumericInput(line.discount) || 0) / 100);
       subtotal += gross;
       const lineTaxable = mode === "GST" ? gross / (1 + line.gstRate / 100) : gross;
       taxable += lineTaxable;
@@ -174,6 +215,7 @@ export function PosTerminal({
           variantId: line.variantId,
           quantity: parseNumericInput(line.quantity),
           unitPrice: parseNumericInput(line.unitPrice),
+          discountPercent: parseNumericInput(line.discount) || 0,
           gstRate: mode === "GST" ? line.gstRate : 0,
           serialNumbers: line.trackSerials ? line.serials.map((s) => s.trim()).filter(Boolean) : undefined,
         })),
@@ -197,7 +239,12 @@ export function PosTerminal({
       {/* Catalogue */}
       <Card className="lg:col-span-2">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Catalogue</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Catalogue</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setAddProductOpen(true)}>
+              <PackagePlus /> Add Product
+            </Button>
+          </div>
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -215,6 +262,7 @@ export function PosTerminal({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{product.name}</p>
+                  {product.subName ? <p className="truncate text-xs text-muted-foreground">{product.subName}</p> : null}
                   <p className="text-xs text-muted-foreground">
                     {product.sku}
                     {product.brand ? ` · ${product.brand.name}` : ""}
@@ -258,7 +306,12 @@ export function PosTerminal({
       {/* Cart */}
       <Card className="lg:col-span-3">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Current sale</CardTitle>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base">Current sale</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setAddCustomerOpen(true)}>
+              <UserPlus /> Add Customer
+            </Button>
+          </div>
           <SearchableSelect
             ariaLabel="Customer"
             options={customerOptions}
@@ -369,8 +422,27 @@ export function PosTerminal({
                     }
                     aria-label="Unit price"
                   />
+                  <Input
+                    className="h-8 w-20 numeric"
+                    type="number"
+                    min="0"
+                    max="100"
+                    step="0.01"
+                    placeholder="Disc %"
+                    value={line.discount}
+                    onChange={(event) =>
+                      setCart((current) =>
+                        current.map((l) => (l.key === line.key ? { ...l, discount: event.target.value } : l)),
+                      )
+                    }
+                    aria-label="Discount percent"
+                  />
                   <span className="numeric ml-auto text-sm font-semibold">
-                    {formatCurrency(parseNumericInput(line.unitPrice) * parseNumericInput(line.quantity))}
+                    {formatCurrency(
+                      parseNumericInput(line.unitPrice) *
+                        parseNumericInput(line.quantity) *
+                        (1 - Math.min(100, parseNumericInput(line.discount) || 0) / 100),
+                    )}
                   </span>
                 </div>
                 {line.trackSerials ? (
@@ -474,6 +546,8 @@ export function PosTerminal({
           ) : null}
         </CardContent>
       </Card>
+      <QuickAddProductDialog open={addProductOpen} onOpenChange={setAddProductOpen} onCreated={onProductCreated} />
+      <QuickAddCustomerDialog open={addCustomerOpen} onOpenChange={setAddCustomerOpen} onCreated={onCustomerCreated} />
     </div>
   );
 }
