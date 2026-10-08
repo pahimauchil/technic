@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { SearchableSelect, type SearchableOption } from "@/components/ui/searchable-select";
 import { Separator } from "@/components/ui/separator";
+import { AddPosCustomerDialog } from "./add-customer-dialog";
 import { checkoutAction } from "./actions";
 import { formatCurrency } from "@/lib/money";
 import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
@@ -60,6 +61,7 @@ export function PosTerminal({
   customers,
   canCollectPayment,
   canSwitchMode,
+  canCreateCustomer,
 }: {
   mode: "GST" | "NON_GST";
   branchId: string;
@@ -67,6 +69,7 @@ export function PosTerminal({
   customers: PosCustomer[];
   canCollectPayment: boolean;
   canSwitchMode: boolean;
+  canCreateCustomer: boolean;
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"GST" | "NON_GST">(initialMode);
@@ -76,6 +79,10 @@ export function PosTerminal({
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [pending, startTransition] = useTransition();
+  /** Customers created from this screen, merged over the server-rendered list. */
+  const [addedCustomers, setAddedCustomers] = useState<PosCustomer[]>([]);
+  const [addCustomerOpen, setAddCustomerOpen] = useState(false);
+  const [newCustomerQuery, setNewCustomerQuery] = useState("");
 
   const matches = useMemo(() => {
     const cleaned = query.trim().toLowerCase();
@@ -119,11 +126,31 @@ export function PosTerminal({
     });
   };
 
-  const customerOptions: SearchableOption[] = customers.map((customer) => ({
+  // The server list plus anyone created at this counter, deduplicated by id
+  // so the refresh that re-pulls server props cannot double them up.
+  const allCustomers = useMemo(() => {
+    const seen = new Set(customers.map((customer) => customer.id));
+    return [
+      ...customers,
+      ...addedCustomers.filter((customer) => !seen.has(customer.id)),
+    ];
+  }, [customers, addedCustomers]);
+
+  const customerOptions: SearchableOption[] = allCustomers.map((customer) => ({
     value: customer.id,
     label: customer.name,
     hint: customer.phone,
   }));
+
+  const handleCustomerCreated = (customer: PosCustomer) => {
+    setAddedCustomers((current) => [...current, customer]);
+    // Select it straight away so the cashier can carry on with the sale.
+    setCustomerId(customer.id);
+    setAddCustomerOpen(false);
+    // Re-pull server props so this screen, the Customers page and reports all
+    // read from the same fresh data.
+    router.refresh();
+  };
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -266,6 +293,15 @@ export function PosTerminal({
             onValueChange={setCustomerId}
             placeholder="Search customer by name or phone…"
             emptyMessage="No customers match"
+            createLabel="Add customer"
+            onCreate={
+              canCreateCustomer
+                ? (search) => {
+                    setNewCustomerQuery(search);
+                    setAddCustomerOpen(true);
+                  }
+                : undefined
+            }
           />
         </CardHeader>
         <CardContent className="space-y-3">
@@ -474,6 +510,13 @@ export function PosTerminal({
           ) : null}
         </CardContent>
       </Card>
+
+      <AddPosCustomerDialog
+        open={addCustomerOpen}
+        onOpenChange={setAddCustomerOpen}
+        initialName={newCustomerQuery}
+        onCreated={handleCustomerCreated}
+      />
     </div>
   );
 }

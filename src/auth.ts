@@ -29,15 +29,16 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
         const user = await prisma.user.findUnique({
           where: { accessCode: parsed.data.accessCode },
           include: {
-            branch: { select: { id: true, name: true, code: true } },
-            firm: { select: { id: true, name: true, status: true } },
-          },
-        });
+          branch: { select: { id: true, name: true, code: true } },
+          firm: { select: { id: true, name: true, status: true, deletedAt: true } },
+        },
+      });
 
-        if (!user || user.status !== "ACTIVE") return null;
+      if (!user || user.status !== "ACTIVE") return null;
 
-        // A firm's users cannot sign in while their firm is deactivated.
-        if (user.firm && user.firm.status !== "ACTIVE") return null;
+      // A firm's users cannot sign in while their firm is deactivated or
+      // sitting in the trash.
+      if (user.firm && (user.firm.status !== "ACTIVE" || user.firm.deletedAt)) return null;
 
         const permissions = await resolvePermissions(user.id, user.role);
 
@@ -102,10 +103,10 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           where: { id: token.id as string },
           include: {
             branch: { select: { id: true, name: true, code: true } },
-            firm: { select: { id: true, name: true } },
+            firm: { select: { id: true, name: true, deletedAt: true } },
           },
         });
-        if (fresh && fresh.status === "ACTIVE") {
+        if (fresh && fresh.status === "ACTIVE" && !fresh.firm?.deletedAt) {
           token.role = fresh.role;
           token.branchId = fresh.branchId;
           token.branchName = fresh.branch?.name ?? null;
@@ -129,22 +130,43 @@ export const { handlers, auth, signIn, signOut, unstable_update } = NextAuth({
           } else {
             const targetFirm = await prisma.firm.findUnique({
               where: { id: requestedFirmId },
-              select: { id: true, name: true, status: true },
+              select: { id: true, name: true, status: true, deletedAt: true },
             });
-            if (targetFirm && targetFirm.status === "ACTIVE") {
+            if (targetFirm && targetFirm.status === "ACTIVE" && !targetFirm.deletedAt) {
               token.activeFirmId = targetFirm.id;
               token.activeFirmName = targetFirm.name;
-              // Also update branch to a branch in the new firm
+              // Repoint the work location at a branch of the new firm.
+              // Leaving the previous firm's branch (or clearing to null while
+              // branches exist) is what produced "work location no longer
+              // valid" on every write after a firm switch.
               const targetBranch = await prisma.branch.findFirst({
                 where: { firmId: targetFirm.id, isActive: true },
                 select: { id: true, name: true, code: true },
               });
-              if (targetBranch) {
-                token.branchId = targetBranch.id;
-                token.branchName = targetBranch.name;
-                token.branchCode = targetBranch.code;
-              }
+              token.branchId = targetBranch?.id ?? null;
+              token.branchName = targetBranch?.name ?? null;
+              token.branchCode = targetBranch?.code ?? null;
             }
+          }
+        } else if (token.activeFirmId) {
+          // Session refresh while operating inside a firm: the branch must
+          // belong to the ACTIVE firm, not merely to the user's own account.
+          // A refresh used to overwrite it with the user's home branch,
+          // breaking writes until the next firm switch.
+          const activeBranchOk =
+            token.branchId &&
+            (await prisma.branch.findFirst({
+              where: { id: token.branchId as string, firmId: token.activeFirmId as string },
+              select: { id: true },
+            }));
+          if (!activeBranchOk) {
+            const fallback = await prisma.branch.findFirst({
+              where: { firmId: token.activeFirmId as string, isActive: true },
+              select: { id: true, name: true, code: true },
+            });
+            token.branchId = fallback?.id ?? null;
+            token.branchName = fallback?.name ?? null;
+            token.branchCode = fallback?.code ?? null;
           }
         }
       }

@@ -116,7 +116,7 @@ export function EditFirmButton({ firmId, firmName }: EditFirmButtonProps) {
           <DialogDescription>Update firm details. Firm code cannot be changed.</DialogDescription>
         </DialogHeader>
         <Link href={`/firms/${firmId}/settings`} className="text-sm text-primary underline-offset-4 hover:underline">
-          Firm settings and deletion
+          Firm settings, trash &amp; restore
         </Link>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">

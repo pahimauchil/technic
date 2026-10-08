@@ -276,9 +276,8 @@ export async function createInvoice(input: InvoiceInput) {
   });
   if (!customer) throw new NotFoundError("Customer not found");
   if (Number(customer.creditLimit) > 0) {
-    const outstanding = Number(customer.outstandingAmount) + (input.paymentAmount ? 0 : 0);
-    // credit check happens against current outstanding after this invoice
-    const wouldBe = outstanding + (await previewInvoiceTotal(input));
+    // Credit check against current outstanding + the total this invoice adds.
+    const wouldBe = Number(customer.outstandingAmount) + (await previewInvoiceTotal(input));
     if (wouldBe > Number(customer.creditLimit)) {
       throw new BusinessRuleError(
         `Credit limit exceeded: this invoice would take the balance to ${wouldBe.toFixed(2)} against a limit of ${Number(customer.creditLimit).toFixed(2)}.`,

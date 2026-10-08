@@ -307,6 +307,9 @@ model Firm {
   /// e.g. "26-27" — drives document numbering reset rules.
   financialYear   String     @default("26-27")
   status          FirmStatus @default(ACTIVE)
+  /// Soft-delete marker: set when the firm is moved to the trash. The firm is
+  /// hidden from every query and purged for good 100 days later.
+  deletedAt       DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

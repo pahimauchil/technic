@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 
 import { runAction, BusinessRuleError, AccessModeError } from "@/lib/action-result";
-import { authorize, requireFirmId } from "@/lib/session";
+import { authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
 import { canBillGst } from "@/lib/access-mode";
 import { createInvoice, type SaleLineInput } from "@/lib/services/sales";
 
@@ -35,6 +35,9 @@ export async function checkoutAction(input: CheckoutInput) {
   return runAction(async () => {
     const user = await authorize("invoice.create");
     const firmId = requireFirmId(user);
+    // Resolve the work location through the same validated path as every
+    // other write — a stale session branch must never reach the ledger.
+    const branchId = await requireWriteBranch(user);
     const requested = input.taxMode === "GST";
     if (requested && !canBillGst(user)) {
       throw new AccessModeError("GST billing requires the GST reporting permission.");
@@ -47,7 +50,7 @@ export async function checkoutAction(input: CheckoutInput) {
 
     const invoice = await createInvoice({
       firmId,
-      branchId: user.branchId ?? "",
+      branchId,
       customerId: input.customerId,
       taxMode: mode,
       lines: input.lines as SaleLineInput[],

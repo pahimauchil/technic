@@ -57,13 +57,25 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   const session = await auth();
   if (!session?.user?.id) return null;
 
-  const firmId = session.user.firmId ?? null;
-  if (firmId) {
-    // JWT sessions are stateless, so a firm deactivated after a user's
-    // token was issued would otherwise keep working until the token next
-    // refreshes. Re-verified on every request.
-    const firm = await prisma.firm.findUnique({ where: { id: firmId }, select: { status: true } });
-    if (!firm || firm.status !== "ACTIVE") return null;
+  const ownFirmId = session.user.firmId ?? null;
+  const activeFirmId = session.user.activeFirmId ?? null;
+  const watchedIds = [...new Set([ownFirmId, activeFirmId].filter(Boolean))] as string[];
+
+  if (watchedIds.length > 0) {
+    // JWT sessions are stateless, so a firm deactivated or moved to the trash
+    // after a user's token was issued would otherwise keep working until the
+    // token next refreshes. Re-verified on every request.
+    const firms = await prisma.firm.findMany({
+      where: { id: { in: watchedIds } },
+      select: { id: true, status: true, deletedAt: true },
+    });
+    const byId = new Map(firms.map((firm) => [firm.id, firm]));
+
+    const own = ownFirmId ? byId.get(ownFirmId) : undefined;
+    if (ownFirmId && (!own || own.status !== "ACTIVE" || own.deletedAt)) return null;
+
+    const active = activeFirmId ? byId.get(activeFirmId) : undefined;
+    if (activeFirmId && (!active || active.deletedAt)) return null;
   }
 
   return {
@@ -215,6 +227,40 @@ export function assertFirmAccess(user: SessionUser, recordFirmId: string | null 
 }
 
 /**
+ * Resolves a usable branch inside `firmId`. The preferred branch is used
+ * when it exists, is active and belongs to the firm; otherwise the firm's
+ * first active branch (then first branch of any kind) is used. Returns null
+ * only when the firm has no branches at all.
+ *
+ * This is the healing path for JWT sessions: a session token pins branchId
+ * at login / firm-switch time, so it can go stale when a firm is entered,
+ * a branch is recreated, or the data underneath an old token changes.
+ * Instead of dead-ending every write with "sign out and back in", the
+ * server resolves the correct location from the active firm.
+ */
+async function resolveUsableBranchId(
+  firmId: string,
+  preferredBranchId?: string | null,
+): Promise<string | null> {
+  if (preferredBranchId) {
+    const preferred = await prisma.branch.findUnique({
+      where: { id: preferredBranchId },
+      select: { id: true, firmId: true, isActive: true },
+    });
+    if (preferred && preferred.firmId === firmId && preferred.isActive) {
+      return preferred.id;
+    }
+  }
+  const active = await prisma.branch.findFirst({
+    where: { firmId, isActive: true },
+    select: { id: true },
+  });
+  if (active) return active.id;
+  const any = await prisma.branch.findFirst({ where: { firmId }, select: { id: true } });
+  return any?.id ?? null;
+}
+
+/**
  * The branch a newly created record should be filed under. For a global
  * role that requested a specific branch, the branch is verified to belong
  * to the caller's own firm before being trusted.
@@ -227,20 +273,26 @@ export async function requireWriteBranch(
 
   if (isGlobalRole(user.role)) {
     const branchId = requestedBranchId ?? user.branchId;
-    if (!branchId) throw new AuthorizationError("A branch must be selected");
-    // Always validate: the session fallback can go stale after data resets.
-    const branch = await prisma.branch.findUnique({
-      where: { id: branchId },
-      select: { firmId: true },
-    });
-    if (!branch || branch.firmId !== firmId) {
-      throw new AuthorizationError(
-        requestedBranchId
-          ? "That branch does not belong to your organization"
-          : "Your saved work location is no longer valid — sign out and back in",
-      );
+    if (branchId) {
+      // Always validate: the session fallback can go stale after data resets.
+      const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { firmId: true, isActive: true },
+      });
+      if (branch && branch.firmId === firmId) {
+        return branchId;
+      }
+      if (requestedBranchId) {
+        throw new AuthorizationError("That branch does not belong to your organization");
+      }
+      // The session's own branch is stale (wrong firm or gone) — fall
+      // through and heal it from the active firm's branches.
     }
-    return branchId;
+    const healed = await resolveUsableBranchId(firmId, null);
+    if (!healed) {
+      throw new AuthorizationError("This organization has no branch yet — add one before creating records");
+    }
+    return healed;
   }
 
   if (!user.branchId) {
