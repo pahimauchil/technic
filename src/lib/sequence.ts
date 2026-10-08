@@ -148,7 +148,28 @@ function pad(value: number, width: number): string {
 }
 
 /** Short customer/supplier codes: CUS00001. */
-export const nextCustomerCode = async (firmId: string, db: Db = prisma) =>
-  formatNumber("CUS", await nextDocumentSequence(firmId, DOCUMENT_TYPES.CUSTOMER, "NON_GST", "ALL", db), 5);
-export const nextSupplierCode = async (firmId: string, db: Db = prisma) =>
-  formatNumber("SUP", await nextDocumentSequence(firmId, DOCUMENT_TYPES.SUPPLIER, "NON_GST", "ALL", db), 5);
+export const nextCustomerCode = async (firmId: string, db: Db = prisma) => {
+  let seq = await nextDocumentSequence(firmId, DOCUMENT_TYPES.CUSTOMER, "NON_GST", "ALL", db);
+  while (true) {
+    const code = formatNumber("CUS", seq, 5);
+    const existing = await db.customer.findFirst({
+      where: { firmId, code },
+      select: { id: true },
+    });
+    if (!existing) return code;
+    seq = await nextDocumentSequence(firmId, DOCUMENT_TYPES.CUSTOMER, "NON_GST", "ALL", db);
+  }
+};
+
+export const nextSupplierCode = async (firmId: string, db: Db = prisma) => {
+  let seq = await nextDocumentSequence(firmId, DOCUMENT_TYPES.SUPPLIER, "NON_GST", "ALL", db);
+  while (true) {
+    const code = formatNumber("SUP", seq, 5);
+    const existing = await db.supplier.findFirst({
+      where: { firmId, code },
+      select: { id: true },
+    });
+    if (!existing) return code;
+    seq = await nextDocumentSequence(firmId, DOCUMENT_TYPES.SUPPLIER, "NON_GST", "ALL", db);
+  }
+};

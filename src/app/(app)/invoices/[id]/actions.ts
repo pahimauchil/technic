@@ -93,3 +93,33 @@ export async function createSalesReturnAction(input: {
     return { returnNumber: returnDoc.returnNumber };
   });
 }
+
+export async function updateInvoiceDispatchAction(input: {
+  invoiceId: string;
+  dispatchThrough?: string | null;
+  vehicleNumber?: string | null;
+  ewayBillNumber?: string | null;
+  buyerOrderNo?: string | null;
+}) {
+  return runAction(async () => {
+    const user = await authorize("invoice.create");
+    const firmId = requireFirmId(user);
+    const visible = await prisma.invoice.findFirst({
+      where: { id: input.invoiceId, firmId, ...taxModeWhere(user) },
+      select: { id: true },
+    });
+    if (!visible) throw new NotFoundError("Invoice not found");
+    const clean = (value?: string | null) => value?.trim() || null;
+    await prisma.invoice.update({
+      where: { id: visible.id },
+      data: {
+        dispatchThrough: clean(input.dispatchThrough),
+        vehicleNumber: clean(input.vehicleNumber)?.toUpperCase() ?? null,
+        ewayBillNumber: clean(input.ewayBillNumber),
+        buyerOrderNo: clean(input.buyerOrderNo),
+      },
+    });
+    revalidatePath(`/invoices/${input.invoiceId}`);
+    return { saved: true };
+  });
+}

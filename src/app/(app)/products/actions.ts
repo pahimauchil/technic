@@ -22,13 +22,24 @@ export async function createProductAction(
 
     revalidatePath("/products");
     revalidatePath("/inventory");
-    return { id: product.id, name: product.name, sku: product.sku };
+    return {
+      id: product.id,
+      name: product.name,
+      subName: product.subName,
+      sku: product.sku,
+      hsnCode: product.hsnCode,
+      gstRate: Number(product.gstRate),
+      purchasePrice: Number(product.purchasePrice),
+      sellingPrice: Number(product.sellingPrice),
+      trackSerials: product.trackSerials,
+    };
   });
 }
 
 export async function updateProductAction(input: {
   id: string;
   name: string;
+  subName?: string | null;
   sku: string;
   barcode?: string | null;
   hsnCode?: string | null;
@@ -61,6 +72,7 @@ export async function updateProductAction(input: {
 
     const patch: Partial<ProductInput> = {
       name: input.name,
+      subName: input.subName === undefined ? existing.subName : input.subName,
       sku: input.sku,
       barcode: input.barcode ?? null,
       hsnCode: input.hsnCode ?? null,
@@ -123,12 +135,16 @@ export async function toggleProductStatusAction(input: { id: string; active: boo
 
     if (input.active) {
       // Re-activation goes through the same edit path.
-      const product = await import("@/lib/prisma").then(({ prisma }) =>
-        prisma.product.update({ where: { id: input.id }, data: { status: "ACTIVE" } }),
-      );
+      const { prisma } = await import("@/lib/prisma");
+      // Firm-scoped: never reactivate another firm's product.
+      const { count } = await prisma.product.updateMany({
+        where: { id: input.id, firmId },
+        data: { status: "ACTIVE" },
+      });
+      if (count === 0) throw new Error("Product not found");
       revalidatePath("/products");
       revalidatePath(`/products/${input.id}`);
-      return { id: product.id, active: true };
+      return { id: input.id, active: true };
     }
 
     const result = await deleteProduct(firmId, input.id, user.id);

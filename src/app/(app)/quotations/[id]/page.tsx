@@ -98,6 +98,7 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
                       <TableCell className="pl-4 numeric">{index + 1}</TableCell>
                       <TableCell>
                         <p className="font-medium">{line.description}</p>
+                        {line.product?.subName ? <p className="text-xs text-muted-foreground">{line.product.subName}</p> : null}
                         {line.serialNumbers ? (
                           <p className="text-xs text-muted-foreground">SN: {Array.isArray(line.serialNumbers) ? line.serialNumbers.join(", ") : line.serialNumbers}</p>
                         ) : null}

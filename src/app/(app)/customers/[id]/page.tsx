@@ -62,6 +62,13 @@ export default async function CustomerDetailPage({
         title={customer.name}
         description={`${CUSTOMER_TYPE_LABELS[customer.type] ?? customer.type} customer · code ${customer.code}`}
         backButton={<Button asChild variant="ghost" size="sm"><Link href="/customers"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Link></Button>}
+        actions={
+          user.permissions.some((code) => code === "reports.view" || code === "payments.view") ? (
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/ledgers/customer?party=${customer.id}`}>View ledger</Link>
+            </Button>
+          ) : null
+        }
       />
 
       <div className="grid gap-4 sm:grid-cols-3">

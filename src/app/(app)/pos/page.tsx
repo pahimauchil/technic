@@ -19,6 +19,7 @@ export default async function PosPage() {
       select: {
         id: true,
         name: true,
+        subName: true,
         sku: true,
         barcode: true,
         hsnCode: true,
@@ -56,6 +57,7 @@ export default async function PosPage() {
         products={products.map((product) => ({
           id: product.id,
           name: product.name,
+          subName: product.subName,
           sku: product.sku,
           barcode: product.barcode,
           hsnCode: product.hsnCode,

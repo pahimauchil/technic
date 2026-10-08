@@ -19,3 +19,5 @@ open-wa-session*.json
 _IGNORE_session/
 .freebuff/
 .node-persist/
+.data/
+backups/

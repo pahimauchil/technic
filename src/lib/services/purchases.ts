@@ -397,36 +397,28 @@ export async function receiveGoods(input: ReceiveInput) {
   });
 }
 
-/** Payable = billed − paid + opening balance. */
+/** Payable = the supplier-ledger closing balance (shared ledger engine). */
 export async function recalcSupplierRollup(
   tx: { supplier: { findUnique: Function; update: Function } },
   firmId: string,
   supplierId: string,
 ): Promise<void> {
+  const { supplierBalance } = await import("@/lib/services/ledger");
   const supplier = await tx.supplier.findUnique({
     where: { id: supplierId },
-    include: {
-      purchaseInvoices: {
-        where: { firmId, status: { not: "CANCELLED" } },
-        select: { total: true },
-      },
-      supplierPayments: { where: { firmId }, select: { amount: true } },
-      purchaseReturns: { where: { firmId }, select: { total: true } },
-    },
+    include: { purchaseInvoices: { where: { firmId, status: { not: "CANCELLED" } }, select: { total: true } } },
   });
   if (!supplier) return;
 
   const totalPurchased = supplier.purchaseInvoices.reduce((sum: number, inv: { total: unknown }) => sum + Number(inv.total), 0);
-  const paid = supplier.supplierPayments.reduce((sum: number, pay: { amount: unknown }) => sum + Number(pay.amount), 0);
-  const returned = supplier.purchaseReturns.reduce((sum: number, ret: { total: unknown }) => sum + Number(ret.total), 0);
-  const outstanding = Math.max(0, round2(totalPurchased - paid - returned + Number(supplier.openingBalance)));
+  const balance = await supplierBalance(tx as never, firmId, supplierId);
 
   await tx.supplier.update({
     where: { id: supplierId },
     data: {
       purchaseCount: supplier.purchaseInvoices.length,
       totalPurchased: round2(totalPurchased),
-      outstandingAmount: outstanding,
+      outstandingAmount: Math.max(0, balance),
     },
   });
 }

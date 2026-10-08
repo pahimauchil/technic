@@ -23,6 +23,7 @@ export interface CompanyProfile {
   website: string;
   gstin: string;
   pan: string;
+  state?: string;
   logoUrl?: string;
   footerText?: string;
   termsConditions?: string;

@@ -40,6 +40,7 @@ export default async function ProductsPage({
       ? {
           OR: [
             { name: { contains: params.q, mode: "insensitive" as const } },
+            { subName: { contains: params.q, mode: "insensitive" as const } },
             { sku: { contains: params.q, mode: "insensitive" as const } },
             { barcode: { contains: params.q } },
             { modelNumber: { contains: params.q, mode: "insensitive" as const } },
@@ -78,6 +79,7 @@ export default async function ProductsPage({
   interface Row {
     id: string;
     name: string;
+    subName: string | null;
     sku: string;
     brand: string | null;
     category: string | null;
@@ -88,6 +90,7 @@ export default async function ProductsPage({
   const rows: Row[] = products.map((product) => ({
     id: product.id,
     name: product.name,
+    subName: product.subName,
     sku: product.sku,
     brand: product.brand?.name ?? null,
     category: product.category?.name ?? null,
@@ -104,6 +107,7 @@ export default async function ProductsPage({
         <Link href={`/products/${row.id}`} className="font-medium hover:text-primary hover:underline">
           {row.name}
           <span className="ml-2 text-xs font-normal text-muted-foreground">{row.sku}</span>
+          {row.subName ? <span className="block text-xs font-normal text-muted-foreground">{row.subName}</span> : null}
         </Link>
       ),
     },
@@ -179,6 +183,7 @@ export default async function ProductsPage({
               <span className="font-medium">{row.name}</span>
               <span className="numeric font-semibold">{formatCurrency(row.price)}</span>
             </div>
+            {row.subName ? <p className="text-xs text-muted-foreground">{row.subName}</p> : null}
             <p className="text-xs text-muted-foreground">
               {row.sku} · {row.quantity} in stock{row.trackSerials ? " · serialized" : ""}
             </p>
