@@ -291,18 +291,21 @@ export async function requireWriteBranch(
 
   if (isGlobalRole(user.role)) {
     const branchId = requestedBranchId ?? user.branchId;
-    if (!branchId) throw new AuthorizationError("A branch must be selected");
-    // Always validate: the session fallback can go stale after data resets.
-    const branch = await prisma.branch.findUnique({
-      where: { id: branchId },
-      select: { firmId: true },
-    });
-    if (branch && branch.firmId === firmId) return branchId;
+    if (branchId) {
+      // Always validate: the session fallback can go stale after data resets.
+      const branch = await prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { firmId: true },
+      });
+      if (branch && branch.firmId === firmId) return branchId;
+    }
     if (requestedBranchId) {
       throw new AuthorizationError("That branch does not belong to your organization");
     }
-    // Stale saved location: recover by using the firm's first active branch
-    // rather than forcing the user to sign out and back in.
+    // No saved location (or a stale one) — recover by using the firm's first
+    // active branch rather than forcing the user to sign out and back in.
+    // An unselected-but-valid work location must not block a create the user
+    // is otherwise permitted to make.
     const fallback = await prisma.branch.findFirst({
       where: { firmId, isActive: true },
       orderBy: { createdAt: "asc" },
