@@ -8,9 +8,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { prisma } from "@/lib/prisma";
 import { requirePermission } from "@/lib/session";
+import { isPlatformRole } from "@/lib/rbac";
 import { formatDate } from "@/lib/dates";
 import { EditFirmButton } from "../../edit-button";
 import { RestoreFirmButton } from "../../restore-button";
+import { PurgeFirmButton } from "../../purge-button";
+import { ToggleFirmStatusButton } from "../../toggle-status-button";
 import { TrashFirmButton } from "./trash-button";
 import {
   TRASH_RETENTION_DAYS,
@@ -45,7 +48,7 @@ export default async function FirmSettingsPage({ params }: { params: Promise<{ i
   // Mirrors the API: anyone below a platform admin only sees their own firm.
   if (user.role !== "PLATFORM_ADMIN" && user.firmId !== firm.id) notFound();
 
-  const canManage = user.permissions.includes("firms.manage" as const);
+  const canManage = isPlatformRole(user.role) && user.permissions.includes("firms.manage" as const);
   const inTrash = Boolean(firm.deletedAt);
   const recordCount =
     firm._count.users +
@@ -141,36 +144,48 @@ export default async function FirmSettingsPage({ params }: { params: Promise<{ i
                   </p>
                   <p className="text-muted-foreground">
                     {trashRetentionElapsed(firm.deletedAt)
-                      ? `Its ${TRASH_RETENTION_DAYS}-day retention has elapsed — it is queued for permanent deletion and can no longer be restored.`
+                      ? `Its ${TRASH_RETENTION_DAYS}-day retention has elapsed — it can no longer be restored.`
                       : `It can be restored until ${formatDate(trashRetentionEnd(firm.deletedAt))} — ${trashDaysLeft(
                           firm.deletedAt,
-                        )} day${trashDaysLeft(firm.deletedAt) === 1 ? "" : "s"} left. After that it is deleted permanently with all of its data.`}
+                        )} day${trashDaysLeft(firm.deletedAt) === 1 ? "" : "s"} left.`}
                   </p>
                 </div>
-                {trashRetentionElapsed(firm.deletedAt) ? null : (
-                  <RestoreFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} />
-                )}
+                <div className="flex items-center gap-2 pt-1">
+                  {!trashRetentionElapsed(firm.deletedAt) && (
+                    <RestoreFirmButton firmId={firm.id} firmName={firm.displayName || firm.name} />
+                  )}
+                  <PurgeFirmButton
+                    firmId={firm.id}
+                    firmCode={firm.code}
+                    firmName={firm.displayName || firm.name}
+                  />
+                </div>
               </>
             ) : (
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="max-w-xl space-y-1 text-sm">
-                  <p>
-                    Moving <strong>{firm.displayName || firm.name}</strong> to the trash hides it from every
-                    screen and signs its users out straight away.
-                  </p>
-                  <p className="text-muted-foreground">
-                    Nothing is erased for {TRASH_RETENTION_DAYS} days — restore it from the Firms page within
-                    that window. Once retention elapses the firm and all of its data are deleted permanently
-                    and cannot be recovered. You must be operating in a different firm to do this.
-                  </p>
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="max-w-xl space-y-1 text-sm">
+                    <p>
+                      Managing status for <strong>{firm.displayName || firm.name}</strong> ({firm.status}).
+                    </p>
+                    <p className="text-muted-foreground">
+                      Deactivating a firm blocks new transactions while preserving 100% of historical records and ledgers.
+                      Moving a firm to the trash soft-deletes it for {TRASH_RETENTION_DAYS} days. Permanent deletion is allowed only if no dependent business records exist.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <ToggleFirmStatusButton
+                      firmId={firm.id}
+                      firmName={firm.displayName || firm.name}
+                      currentStatus={firm.status as "ACTIVE" | "INACTIVE"}
+                    />
+                    <TrashFirmButton
+                      firmId={firm.id}
+                      firmCode={firm.code}
+                      firmName={firm.displayName || firm.name}
+                      recordCount={recordCount}
+                    />
+                  </div>
                 </div>
-                <TrashFirmButton
-                  firmId={firm.id}
-                  firmCode={firm.code}
-                  firmName={firm.displayName || firm.name}
-                  recordCount={recordCount}
-                />
-              </div>
             )}
           </CardContent>
         </Card>

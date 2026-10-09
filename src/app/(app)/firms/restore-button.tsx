@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
@@ -13,6 +14,7 @@ interface RestoreFirmButtonProps {
 }
 
 export function RestoreFirmButton({ firmId, firmName }: RestoreFirmButtonProps) {
+  const router = useRouter();
   const [pending, setPending] = useState(false);
 
   const handleRestore = async () => {
@@ -21,7 +23,7 @@ export function RestoreFirmButton({ firmId, firmName }: RestoreFirmButtonProps) 
       const result = await restoreFirmAction({ firmId });
       if (result.ok) {
         toast.success(`${firmName} is back in service`);
-        window.location.reload();
+        router.refresh();
       } else {
         toast.error(result.error);
       }

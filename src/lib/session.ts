@@ -121,7 +121,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
   let branchId = session.user.branchId;
   let branchName = session.user.branchName;
   let branchCode = session.user.branchCode;
-  if (activeFirmId) {
+  if (activeFirmId && branchId) {
     const resolved = await resolveWorkBranch(activeFirmId, branchId, session.user.role);
     if (resolved) {
       branchId = resolved.id;
@@ -247,8 +247,16 @@ export function resolveBranchScope(
     return { branchId: user.branchId ?? "__no_branch__", canSeeAllBranches: false, firmId };
   }
 
-  if (requestedBranchId && requestedBranchId !== "all") {
+  if (requestedBranchId === "all") {
+    return { branchId: undefined, canSeeAllBranches: true, firmId };
+  }
+
+  if (requestedBranchId) {
     return { branchId: requestedBranchId, canSeeAllBranches: true, firmId };
+  }
+
+  if (user.branchId) {
+    return { branchId: user.branchId, canSeeAllBranches: true, firmId };
   }
 
   return { branchId: undefined, canSeeAllBranches: true, firmId };
