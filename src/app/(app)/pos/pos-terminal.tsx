@@ -3,7 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-import { Barcode, Minus, PackagePlus, Plus, ScanLine, Search, Trash2, UserPlus } from "lucide-react";
+import { Barcode, Minus, PackagePlus, Plus, ScanLine, Search, Tag, Trash2, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { QuickAddCustomerDialog, QuickAddProductDialog, type QuickCustomer, type
 import { checkoutAction } from "./actions";
 import { formatCurrency } from "@/lib/money";
 import { parseNumericInput, tidyAmountOnBlur, tidyQuantityOnBlur } from "@/lib/numeric-input";
+import { computeDiscountSummary, tidyDiscountOnBlur, type DiscountType } from "@/lib/discounts";
 import { cn } from "@/lib/utils";
 
 interface PosProduct {
@@ -51,8 +52,10 @@ interface CartLine {
   quantity: string;
   /** Raw input text — kept as a string so the field can be cleared while editing. */
   unitPrice: string;
-  /** Raw input text — line discount percentage. */
+  /** Raw input text — line discount value. */
   discount: string;
+  /** Line discount unit: percent (%) or flat amount (₹). */
+  discountType: DiscountType;
   gstRate: number;
   trackSerials: boolean;
   serials: string[];
@@ -83,6 +86,8 @@ export function PosTerminal({
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<CartLine[]>([]);
   const [customerId, setCustomerId] = useState<string>("");
+  const [billDiscount, setBillDiscount] = useState("");
+  const [billDiscountType, setBillDiscountType] = useState<DiscountType>("%");
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [pending, startTransition] = useTransition();
@@ -123,6 +128,7 @@ export function PosTerminal({
           quantity: "1",
           unitPrice: String(variant?.sellingPrice ?? product.sellingPrice),
           discount: "0",
+          discountType: "%",
           gstRate: product.gstRate,
           trackSerials: product.trackSerials,
           serials: Array.from({ length: 1 }, () => ""),
@@ -166,34 +172,24 @@ export function PosTerminal({
   }));
 
   const totals = useMemo(() => {
-    let subtotal = 0;
-    let taxable = 0;
-    let cgst = 0;
-    let sgst = 0;
-    for (const line of cart) {
-      const gross =
-        parseNumericInput(line.unitPrice) *
-        parseNumericInput(line.quantity) *
-        (1 - Math.min(100, parseNumericInput(line.discount) || 0) / 100);
-      subtotal += gross;
-      const lineTaxable = mode === "GST" ? gross / (1 + line.gstRate / 100) : gross;
-      taxable += lineTaxable;
-      if (mode === "GST") {
-        const tax = gross - lineTaxable;
-        cgst += tax / 2;
-        sgst += tax / 2;
-      }
-    }
-    const total = Math.round(subtotal);
-    return {
-      subtotal,
-      taxable,
-      cgst,
-      sgst,
-      roundOff: total - subtotal,
-      total,
-    };
-  }, [cart, mode]);
+    return computeDiscountSummary({
+      lines: cart.map((line) => ({
+        quantity: parseNumericInput(line.quantity),
+        unitPrice: parseNumericInput(line.unitPrice),
+        discountType: line.discountType,
+        discountValue: parseNumericInput(line.discount),
+        gstRate: mode === "GST" ? line.gstRate : 0,
+      })),
+      billDiscount:
+        parseNumericInput(billDiscount) > 0
+          ? {
+              type: billDiscountType,
+              value: parseNumericInput(billDiscount),
+            }
+          : null,
+      mode,
+    });
+  }, [cart, billDiscount, billDiscountType, mode]);
 
   const checkout = () => {
     if (!customerId) {
@@ -212,12 +208,12 @@ export function PosTerminal({
     startTransition(async () => {
       const result = await checkoutAction({
         customerId,
-        lines: cart.map((line) => ({
+        lines: cart.map((line, index) => ({
           productId: line.productId,
           variantId: line.variantId,
           quantity: parseNumericInput(line.quantity),
           unitPrice: parseNumericInput(line.unitPrice),
-          discountPercent: parseNumericInput(line.discount) || 0,
+          discountPercent: totals.lines[index]?.effectiveDiscountPercent ?? 0,
           gstRate: mode === "GST" ? line.gstRate : 0,
           serialNumbers: line.trackSerials ? line.serials.map((s) => s.trim()).filter(Boolean) : undefined,
         })),
@@ -228,6 +224,7 @@ export function PosTerminal({
       if (result.ok) {
         toast.success(`Invoice ${result.data.invoiceNumber} created`);
         setCart([]);
+        setBillDiscount("");
         setPaymentAmount("");
         router.push(`/invoices/${result.data.invoiceId}`);
       } else {
@@ -332,7 +329,9 @@ export function PosTerminal({
               <p className="text-sm">Cart is empty — add products from the catalogue.</p>
             </div>
           ) : (
-            cart.map((line) => (
+            cart.map((line, index) => {
+              const lineComputed = totals.lines[index];
+              return (
               <div key={line.key} className="space-y-2 rounded-lg border border-border p-3">
                 <div className="flex items-center justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-medium">{line.name}</p>
@@ -426,28 +425,84 @@ export function PosTerminal({
                     }
                     aria-label="Unit price"
                   />
-                  <Input
-                    className="h-8 w-20 numeric"
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.01"
-                    placeholder="Disc %"
-                    value={line.discount}
-                    onChange={(event) =>
-                      setCart((current) =>
-                        current.map((l) => (l.key === line.key ? { ...l, discount: event.target.value } : l)),
-                      )
-                    }
-                    aria-label="Discount percent"
-                  />
-                  <span className="numeric ml-auto text-sm font-semibold">
-                    {formatCurrency(
-                      parseNumericInput(line.unitPrice) *
-                        parseNumericInput(line.quantity) *
-                        (1 - Math.min(100, parseNumericInput(line.discount) || 0) / 100),
-                    )}
-                  </span>
+                  <div className="flex items-center rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
+                    <Input
+                      className="h-8 w-16 border-0 shadow-none focus-visible:ring-0 numeric px-2 text-right text-xs"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder="0"
+                      value={line.discount}
+                      onChange={(event) =>
+                        setCart((current) =>
+                          current.map((l) => (l.key === line.key ? { ...l, discount: event.target.value } : l)),
+                        )
+                      }
+                      onBlur={(event) =>
+                        setCart((current) =>
+                          current.map((l) =>
+                            l.key === line.key
+                              ? {
+                                  ...l,
+                                  discount: tidyDiscountOnBlur(
+                                    event.target.value,
+                                    l.discountType,
+                                    parseNumericInput(l.unitPrice) * parseNumericInput(l.quantity),
+                                  ),
+                                }
+                              : l,
+                          ),
+                        )
+                      }
+                      aria-label="Discount"
+                    />
+                    <div className="flex items-center gap-0.5 bg-muted/70 p-0.5 rounded mr-1">
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-1.5 py-0.5 text-[10px] font-bold rounded transition-colors",
+                          line.discountType === "%"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() =>
+                          setCart((current) =>
+                            current.map((l) => (l.key === line.key ? { ...l, discountType: "%" } : l)),
+                          )
+                        }
+                        title="Discount in percent"
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-1.5 py-0.5 text-[10px] font-bold rounded transition-colors",
+                          line.discountType === "₹"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() =>
+                          setCart((current) =>
+                            current.map((l) => (l.key === line.key ? { ...l, discountType: "₹" } : l)),
+                          )
+                        }
+                        title="Discount in rupees"
+                      >
+                        ₹
+                      </button>
+                    </div>
+                  </div>
+                  <div className="ml-auto flex items-baseline gap-1.5">
+                    {lineComputed && lineComputed.totalDiscountAmount > 0 ? (
+                      <span className="text-xs text-muted-foreground line-through numeric">
+                        {formatCurrency(lineComputed.gross)}
+                      </span>
+                    ) : null}
+                    <span className="numeric text-sm font-semibold">
+                      {formatCurrency(lineComputed?.netTotal ?? 0)}
+                    </span>
+                  </div>
                 </div>
                 {line.trackSerials ? (
                   <div className="space-y-1.5">
@@ -473,11 +528,63 @@ export function PosTerminal({
                   </div>
                 ) : null}
               </div>
-            ))
+            );})
           )}
 
           {cart.length > 0 ? (
             <>
+              <div className="rounded-lg border border-border bg-muted/20 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-medium text-foreground">
+                    <Tag className="size-3.5 text-primary" />
+                    <span>Bill Discount</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-0.5 bg-muted p-0.5 rounded border border-input">
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-2 py-0.5 text-xs font-semibold rounded transition-colors",
+                          billDiscountType === "%"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() => setBillDiscountType("%")}
+                      >
+                        %
+                      </button>
+                      <button
+                        type="button"
+                        className={cn(
+                          "px-2 py-0.5 text-xs font-semibold rounded transition-colors",
+                          billDiscountType === "₹"
+                            ? "bg-background text-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        onClick={() => setBillDiscountType("₹")}
+                      >
+                        ₹
+                      </button>
+                    </div>
+                    <Input
+                      className="h-8 w-24 text-right numeric text-xs"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      placeholder={billDiscountType === "%" ? "0 %" : "₹ 0"}
+                      value={billDiscount}
+                      onChange={(event) => setBillDiscount(event.target.value)}
+                      onBlur={(event) =>
+                        setBillDiscount(
+                          tidyDiscountOnBlur(event.target.value, billDiscountType, totals.grossSubtotal),
+                        )
+                      }
+                      aria-label="Overall bill discount"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {canSwitchMode && (
                 <div className="flex items-center justify-between py-2">
                   <span className="text-sm text-muted-foreground">Invoice type</span>
@@ -494,12 +601,33 @@ export function PosTerminal({
               )}
               <Separator />
               <div className="space-y-1 text-sm">
-                <div className="flex justify-between"><span className="text-muted-foreground">Subtotal</span><span className="numeric">{formatCurrency(totals.subtotal)}</span></div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Items subtotal</span>
+                  <span className="numeric">{formatCurrency(totals.grossSubtotal)}</span>
+                </div>
+                {totals.lineDiscountTotal > 0 ? (
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                    <span>Item discounts</span>
+                    <span className="numeric">-{formatCurrency(totals.lineDiscountTotal)}</span>
+                  </div>
+                ) : null}
+                {totals.billDiscountTotal > 0 ? (
+                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
+                    <span>Bill discount ({billDiscountType === "%" ? `${parseNumericInput(billDiscount)}%` : "flat"})</span>
+                    <span className="numeric">-{formatCurrency(totals.billDiscountTotal)}</span>
+                  </div>
+                ) : null}
+                {totals.totalDiscount > 0 && totals.lineDiscountTotal > 0 && totals.billDiscountTotal > 0 ? (
+                  <div className="flex justify-between font-medium text-emerald-600 dark:text-emerald-400 border-t border-dashed border-border pt-1">
+                    <span>Total discount</span>
+                    <span className="numeric">-{formatCurrency(totals.totalDiscount)}</span>
+                  </div>
+                ) : null}
                 {mode === "GST" ? (
                   <>
-                    <div className="flex justify-between"><span className="text-muted-foreground">Taxable value</span><span className="numeric">{formatCurrency(totals.taxable)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">CGST</span><span className="numeric">{formatCurrency(totals.cgst)}</span></div>
-                    <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="numeric">{formatCurrency(totals.sgst)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">Taxable value</span><span className="numeric">{formatCurrency(totals.taxableTotal)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">CGST</span><span className="numeric">{formatCurrency(totals.cgstTotal)}</span></div>
+                    <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="numeric">{formatCurrency(totals.sgstTotal)}</span></div>
                   </>
                 ) : (
                   <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="numeric">Non-Tax</span></div>
@@ -508,7 +636,7 @@ export function PosTerminal({
                   <div className="flex justify-between"><span className="text-muted-foreground">Round off</span><span className="numeric">{formatCurrency(totals.roundOff)}</span></div>
                 ) : null}
                 <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
-                  <span>Total</span><span className="numeric">{formatCurrency(totals.total)}</span>
+                  <span>Total</span><span className="numeric">{formatCurrency(totals.totalAmount)}</span>
                 </div>
               </div>
 
@@ -541,7 +669,7 @@ export function PosTerminal({
                 onClick={checkout}
                 disabled={pending || !customerId}
               >
-                {pending ? "Billing…" : `Charge ${formatCurrency(totals.total)}`}
+                {pending ? "Billing…" : `Charge ${formatCurrency(totals.totalAmount)}`}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
                 Invoice will be a {mode === "GST" ? "Tax Invoice" : "Non-Tax Invoice"}
