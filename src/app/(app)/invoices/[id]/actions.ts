@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { runAction, NotFoundError } from "@/lib/action-result";
 import { authorize, requireFirmId, requireWriteBranch, taxModeWhere } from "@/lib/session";
 import { recordCustomerPayment, createSalesReturn } from "@/lib/services/payments";
-import { cancelInvoice, updateInvoice } from "@/lib/services/sales";
+import { cancelInvoice, updateInvoice, deleteInvoice } from "@/lib/services/sales";
 import { PERMISSIONS } from "@/lib/rbac";
 import { prisma } from "@/lib/prisma";
 
@@ -206,3 +206,29 @@ export async function updateInvoiceAction(input: {
     };
   });
 }
+
+export async function deleteInvoiceAction(input: { invoiceId: string }) {
+  return runAction(async () => {
+    const user = await authorize([
+      PERMISSIONS.INVOICE_DELETE,
+      PERMISSIONS.INVOICE_EDIT,
+      PERMISSIONS.SALES_EDIT,
+    ]);
+    if (!user.activeFirmId) throw new Error("Select a firm first");
+
+    const visible = await prisma.invoice.findFirst({
+      where: { id: input.invoiceId, firmId: user.activeFirmId, ...taxModeWhere(user) },
+      select: { id: true },
+    });
+    if (!visible) throw new NotFoundError("Invoice not found");
+
+    await deleteInvoice(user.activeFirmId, input.invoiceId, user.id);
+
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${input.invoiceId}`);
+    revalidatePath("/customers");
+    revalidatePath("/inventory");
+    return { success: true };
+  });
+}
+

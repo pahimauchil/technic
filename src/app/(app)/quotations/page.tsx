@@ -12,6 +12,7 @@ import { requirePermissionInFirm, taxModeWhere, type SessionUser } from "@/lib/s
 import { canBillGst } from "@/lib/access-mode";
 import { isPlatformRole } from "@/lib/rbac";
 import { NewQuotationButton } from "./new-quotation-button";
+import { DeleteQuotationButton } from "./delete-quotation-button";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
 import { QUOTATION_STATUS_LABELS } from "@/lib/workflow";
@@ -113,6 +114,14 @@ export default async function QuotationsPage({
                 <Link href={`/quotations/${row.id}?edit=true`}>Edit</Link>
               </Button>
             ) : null}
+            {canDelete ? (
+              <DeleteQuotationButton
+                quotationId={row.id}
+                quotationNumber={row.number}
+                size="sm"
+                variant="outline"
+              />
+            ) : null}
             {user.permissions.includes("quotation.convert") ? (
               <ConvertButton quotationId={row.id} />
             ) : null}
@@ -124,6 +133,10 @@ export default async function QuotationsPage({
   const canCreate = user.permissions.includes("quotation.create");
   const canEdit =
     user.permissions.includes("quotation.create") ||
+    user.permissions.includes("sales.edit") ||
+    user.permissions.includes("quotation.edit");
+  const canDelete =
+    user.permissions.includes("quotation.delete") ||
     user.permissions.includes("sales.edit") ||
     user.permissions.includes("quotation.edit");
   const canSwitchMode = isPlatformRole(user.role);

@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 
 import { runAction } from "@/lib/action-result";
 import { authorize, requireFirmId, requireWriteBranch } from "@/lib/session";
-import { createQuotation, updateQuotation } from "@/lib/services/sales";
+import { createQuotation, updateQuotation, deleteQuotation } from "@/lib/services/sales";
 import { PERMISSIONS } from "@/lib/rbac";
 
 export async function createQuotationAction(input: {
@@ -107,4 +107,22 @@ export async function updateQuotationAction(input: {
     };
   });
 }
+
+export async function deleteQuotationAction(input: { quotationId: string }) {
+  return runAction(async () => {
+    const user = await authorize([
+      PERMISSIONS.QUOTATION_DELETE,
+      PERMISSIONS.QUOTATION_EDIT,
+      PERMISSIONS.SALES_EDIT,
+    ]);
+    const firmId = requireFirmId(user);
+
+    await deleteQuotation(firmId, input.quotationId, user.id);
+
+    revalidatePath("/quotations");
+    revalidatePath(`/quotations/${input.quotationId}`);
+    return { success: true };
+  });
+}
+
 

@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listInvoices } from "@/lib/services/invoice-list";
+import { DeleteInvoiceButton } from "./delete-invoice-button";
 import { requirePermissionInFirm } from "@/lib/session";
 import { formatCurrency } from "@/lib/money";
 import { formatDate } from "@/lib/dates";
@@ -100,17 +101,33 @@ export default async function InvoicesPage({
       header: "",
       headerClassName: "text-right",
       className: "text-right",
-      cell: (row) =>
-        row.status !== "CANCELLED" && canEdit ? (
-          <Button asChild size="sm" variant="outline">
-            <Link href={`/invoices/${row.id}?edit=true`}>Edit</Link>
-          </Button>
-        ) : null,
+      cell: (row) => (
+        <div className="flex items-center justify-end gap-1.5">
+          {row.status !== "CANCELLED" && canEdit ? (
+            <Button asChild size="sm" variant="outline">
+              <Link href={`/invoices/${row.id}?edit=true`}>Edit</Link>
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <DeleteInvoiceButton
+              invoiceId={row.id}
+              invoiceNumber={row.invoiceNumber}
+              isCancelled={row.status === "CANCELLED"}
+              size="sm"
+              variant="outline"
+            />
+          ) : null}
+        </div>
+      ),
     },
   ];
 
   const canEdit =
     user.permissions.includes("invoice.create") ||
+    user.permissions.includes("sales.edit") ||
+    user.permissions.includes("invoice.edit");
+  const canDelete =
+    user.permissions.includes("invoice.delete") ||
     user.permissions.includes("sales.edit") ||
     user.permissions.includes("invoice.edit");
 

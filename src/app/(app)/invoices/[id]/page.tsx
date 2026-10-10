@@ -21,6 +21,7 @@ import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/workflow";
 import { NotFoundError } from "@/lib/action-result";
 
 import { EditInvoiceButton } from "./edit-invoice-button";
+import { DeleteInvoiceButton } from "../delete-invoice-button";
 
 export const metadata = { title: "Invoice — Technic Technologies" };
 
@@ -56,6 +57,11 @@ export default async function InvoiceDetailPage({
   const canEdit =
     invoice.status !== "CANCELLED" &&
     (user.permissions.includes("invoice.create") ||
+      user.permissions.includes("sales.edit") ||
+      user.permissions.includes("invoice.edit"));
+  const canDelete =
+    invoice.salesReturns.length === 0 &&
+    (user.permissions.includes("invoice.delete") ||
       user.permissions.includes("sales.edit") ||
       user.permissions.includes("invoice.edit"));
 
@@ -112,6 +118,14 @@ export default async function InvoiceDetailPage({
               />
             ) : null}
             {canCancel ? <CancelInvoiceButton invoiceId={invoice.id} /> : null}
+            {canDelete ? (
+              <DeleteInvoiceButton
+                invoiceId={invoice.id}
+                invoiceNumber={invoice.invoiceNumber}
+                isCancelled={invoice.status === "CANCELLED"}
+                redirectOnDelete
+              />
+            ) : null}
           </>
         }
       />

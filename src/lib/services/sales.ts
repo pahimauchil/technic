@@ -286,6 +286,55 @@ export async function updateQuotation(input: UpdateQuotationInput) {
   });
 }
 
+export async function deleteQuotation(
+  firmId: string,
+  quotationId: string,
+  userId?: string | null,
+) {
+  const quotation = await prisma.quotation.findFirst({
+    where: { id: quotationId, firmId },
+    include: {
+      convertedInvoices: { select: { id: true, invoiceNumber: true } },
+      convertedSalesOrders: { select: { id: true, orderNumber: true } },
+    },
+  });
+  if (!quotation) throw new NotFoundError("Quotation not found");
+  if (
+    quotation.status === "CONVERTED" ||
+    quotation.convertedInvoices.length > 0 ||
+    quotation.convertedSalesOrders.length > 0
+  ) {
+    throw new BusinessRuleError("Cannot delete a converted quotation");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await tx.quotationLine.deleteMany({
+      where: { quotationId: quotation.id },
+    });
+
+    const deleted = await tx.quotation.delete({
+      where: { id: quotation.id },
+    });
+
+    await recordAudit({
+      action: "QUOTATION_DELETED",
+      entity: "Quotation",
+      entityId: quotation.id,
+      summary: `Quotation deleted: ${quotation.quotationNumber}`,
+      firmId,
+      branchId: quotation.branchId,
+      userId,
+      before: {
+        quotationNumber: quotation.quotationNumber,
+        total: Number(quotation.totalAmount),
+        status: quotation.status,
+      },
+    });
+
+    return deleted;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Sales orders
 // ---------------------------------------------------------------------------
@@ -1046,6 +1095,141 @@ export async function updateInvoice(input: UpdateInvoiceInput) {
     });
 
     return updated;
+  });
+}
+
+export async function deleteInvoice(
+  firmId: string,
+  invoiceId: string,
+  userId?: string | null,
+) {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: invoiceId, firmId },
+    include: {
+      lines: true,
+      salesReturns: { select: { id: true } },
+    },
+  });
+  if (!invoice) throw new NotFoundError("Invoice not found");
+  if (invoice.salesReturns.length > 0) {
+    throw new BusinessRuleError(
+      "Cannot delete this invoice because sales return(s) have been processed against it.",
+    );
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // 1. If invoice was not cancelled, restore inventory and release serials/warranties
+    if (invoice.status !== "CANCELLED") {
+      for (const line of invoice.lines) {
+        await writeStockTransaction(tx, {
+          firmId,
+          branchId: invoice.branchId,
+          productId: line.productId,
+          variantId: line.variantId,
+          type: "SALE_RETURN_IN",
+          quantity: line.quantity,
+          reference: invoice.invoiceNumber,
+          documentType: "INVOICE_DELETE",
+          documentId: invoice.id,
+          notes: "Invoice deleted — stock restored",
+          userId: userId ?? null,
+        });
+
+        if (line.serialNumbers) {
+          const serials = line.serialNumbers.split("\n").filter(Boolean);
+          const units = await tx.serialUnit.findMany({
+            where: { firmId, serialNumber: { in: serials } },
+            select: { id: true },
+          });
+          if (units.length > 0) {
+            await transitionSerialUnits(tx, {
+              firmId,
+              serialUnitIds: units.map((u) => u.id),
+              eventType: "SALE_RETURNED",
+              toStatus: "IN_STOCK",
+              reference: invoice.invoiceNumber,
+              note: "Invoice deleted — returned to stock",
+              userId: userId ?? null,
+            });
+          }
+        }
+      }
+
+      await tx.serialUnit.updateMany({
+        where: { soldInvoiceId: invoice.id },
+        data: {
+          status: "IN_STOCK",
+          soldInvoiceId: null,
+          soldInvoiceLineId: null,
+          sellingPrice: 0,
+          soldAt: null,
+        },
+      });
+
+      await tx.warranty.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
+    }
+
+    // 2. Delete payments associated with this invoice
+    await tx.payment.deleteMany({
+      where: { invoiceId: invoice.id },
+    });
+
+    // 3. Delete invoice lines
+    await tx.invoiceLine.deleteMany({
+      where: { invoiceId: invoice.id },
+    });
+
+    // 4. Revert quotation/order converted status if applicable
+    if (invoice.quotationId) {
+      const remaining = await tx.invoice.count({
+        where: { quotationId: invoice.quotationId, id: { not: invoice.id } },
+      });
+      if (remaining === 0) {
+        await tx.quotation.update({
+          where: { id: invoice.quotationId },
+          data: { status: "ACCEPTED", convertedAt: null },
+        });
+      }
+    }
+    if (invoice.salesOrderId) {
+      const remaining = await tx.invoice.count({
+        where: { salesOrderId: invoice.salesOrderId, id: { not: invoice.id } },
+      });
+      if (remaining === 0) {
+        await tx.salesOrder.update({
+          where: { id: invoice.salesOrderId },
+          data: { status: "CONFIRMED" },
+        });
+      }
+    }
+
+    // 5. Delete the invoice
+    const deleted = await tx.invoice.delete({
+      where: { id: invoice.id },
+    });
+
+    // 6. Recalculate customer rollup
+    await recalcCustomerRollup(tx, firmId, invoice.customerId);
+
+    // 7. Record audit
+    await recordAudit({
+      action: "INVOICE_DELETED",
+      entity: "Invoice",
+      entityId: invoice.id,
+      summary: `Invoice deleted: ${invoice.invoiceNumber}`,
+      firmId,
+      branchId: invoice.branchId,
+      userId,
+      before: {
+        invoiceNumber: invoice.invoiceNumber,
+        total: Number(invoice.totalAmount),
+        status: invoice.status,
+      },
+    });
+
+    return deleted;
   });
 }
 

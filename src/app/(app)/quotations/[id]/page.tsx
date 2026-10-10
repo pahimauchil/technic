@@ -18,6 +18,7 @@ import { NotFoundError } from "@/lib/action-result";
 
 import { isPlatformRole } from "@/lib/rbac";
 import { EditQuotationButton } from "../edit-quotation-button";
+import { DeleteQuotationButton } from "../delete-quotation-button";
 
 export const metadata = { title: "Quotation — Technic Technologies" };
 
@@ -49,6 +50,11 @@ export default async function QuotationDetailPage({
     (user.permissions.includes("quotation.create") ||
       user.permissions.includes("sales.edit") ||
       user.permissions.includes("quotation.edit"));
+  const canDelete =
+    quotation.status !== "CONVERTED" &&
+    (user.permissions.includes("quotation.delete") ||
+      user.permissions.includes("sales.edit") ||
+      user.permissions.includes("quotation.edit"));
   const canSwitchMode = isPlatformRole(user.role);
 
   return (
@@ -75,6 +81,13 @@ export default async function QuotationDetailPage({
                 quotation={quotation}
                 canSwitchMode={canSwitchMode}
                 defaultOpen={sParams.edit === "true"}
+              />
+            ) : null}
+            {canDelete ? (
+              <DeleteQuotationButton
+                quotationId={quotation.id}
+                quotationNumber={quotation.quotationNumber}
+                redirectOnDelete
               />
             ) : null}
             {canConvert ? (
