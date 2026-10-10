@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CreateBranchButton } from "./create-button";
 import { EditBranchButton } from "./edit-button";
+import { DeleteBranchButton } from "./delete-button";
 import { SetWorkBranchButton } from "./set-work-branch-button";
 import { prisma } from "@/lib/prisma";
 import { requirePermission, requireFirmId } from "@/lib/session";
@@ -95,6 +96,13 @@ export default async function BranchesPage() {
                       disabled={!branch.isActive}
                     />
                     {canManage && <EditBranchButton branch={branch} />}
+                    {canManage && branches.length > 1 && (
+                      <DeleteBranchButton
+                        branchId={branch.id}
+                        branchName={branch.name}
+                        branchCode={branch.code}
+                      />
+                    )}
                   </div>
                 </div>
               </CardContent>

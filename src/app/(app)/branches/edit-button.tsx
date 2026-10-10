@@ -190,12 +190,48 @@ export function EditBranchButton({ branch }: EditBranchButtonProps) {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? "Saving..." : "Save Changes"}
-            </Button>
+            <div className="flex w-full items-center justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={async () => {
+                  if (
+                    !confirm(
+                      `Are you sure you want to delete branch "${branch.name}" (${branch.code})? Any assigned users will be moved to the main Head Office.`
+                    )
+                  ) {
+                    return;
+                  }
+                  setPending(true);
+                  try {
+                    const { deleteBranchAction } = await import("./actions");
+                    const res = await deleteBranchAction({ branchId: branch.id });
+                    if (res.ok) {
+                      toast.success(`Branch ${branch.name} deleted`);
+                      setOpen(false);
+                      router.refresh();
+                    } else {
+                      toast.error(res.error);
+                    }
+                  } finally {
+                    setPending(false);
+                  }
+                }}
+                disabled={pending}
+              >
+                Delete Branch
+              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" onClick={() => setOpen(false)} disabled={pending}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={pending}>
+                  {pending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
           </DialogFooter>
         </form>
       </DialogContent>

@@ -198,3 +198,101 @@ export async function switchBranchAction(input: { branchId: string | null }) {
     return { switched: true, branchName: branch.name };
   });
 }
+
+export async function deleteBranchAction(input: { branchId: string }) {
+  return runAction(async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new AuthenticationError("Sign in again");
+    if (!user.permissions.includes("firms.manage" as const)) {
+      throw new AuthorizationError("You do not have permission to delete branches");
+    }
+
+    const firmId = requireFirmId(user);
+    const branch = await prisma.branch.findFirst({
+      where: { id: input.branchId, firmId },
+      include: {
+        _count: {
+          select: {
+            invoices: true,
+            purchaseOrders: true,
+            purchaseInvoices: true,
+            quotations: true,
+            salesOrders: true,
+            serialUnits: true,
+            stockTransactions: true,
+          },
+        },
+      },
+    });
+    if (!branch) throw new NotFoundError("Branch not found in this firm");
+
+    // Cannot delete the only branch of a firm
+    const branchCount = await prisma.branch.count({ where: { firmId } });
+    if (branchCount <= 1) {
+      throw new BusinessRuleError("Cannot delete the only branch of the firm. Every firm must have at least one branch.");
+    }
+
+    // Check if transactional records are tied to this branch
+    const txnCount =
+      branch._count.invoices +
+      branch._count.purchaseOrders +
+      branch._count.purchaseInvoices +
+      branch._count.quotations +
+      branch._count.salesOrders +
+      branch._count.serialUnits +
+      branch._count.stockTransactions;
+
+    if (txnCount > 0) {
+      throw new BusinessRuleError(
+        `Cannot delete branch "${branch.name}" because it has ${txnCount} active transaction/inventory record(s). You can mark it as Inactive instead.`
+      );
+    }
+
+    // Find a fallback branch in the same firm to reassign staff users
+    const fallbackBranch = await prisma.branch.findFirst({
+      where: { firmId, id: { not: branch.id } },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (fallbackBranch) {
+      await prisma.user.updateMany({
+        where: { branchId: branch.id },
+        data: { branchId: fallbackBranch.id },
+      });
+    }
+
+    // Delete the branch
+    await prisma.branch.delete({
+      where: { id: branch.id },
+    });
+
+    // If current session was on this branch, update session
+    if (user.branchId === branch.id) {
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { branchId: fallbackBranch?.id ?? null },
+      });
+      await unstable_update({
+        branchId: fallbackBranch?.id ?? null,
+        branchName: fallbackBranch?.name ?? null,
+        branchCode: fallbackBranch?.code ?? null,
+      } as never);
+    }
+
+    await recordAudit({
+      action: "FIRM_UPDATED",
+      entity: "Branch",
+      entityId: branch.id,
+      summary: `Deleted branch ${branch.code} (${branch.name})`,
+      firmId,
+      branchId: fallbackBranch?.id ?? null,
+      userId: user.id,
+    });
+
+    revalidatePath("/branches");
+    revalidatePath("/firms");
+    revalidatePath("/", "layout");
+    return { deleted: true };
+  });
+}
+
