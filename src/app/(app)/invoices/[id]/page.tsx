@@ -20,11 +20,20 @@ import { formatDate } from "@/lib/dates";
 import { INVOICE_STATUS_LABELS, PAYMENT_METHOD_LABELS } from "@/lib/workflow";
 import { NotFoundError } from "@/lib/action-result";
 
+import { EditInvoiceButton } from "./edit-invoice-button";
+
 export const metadata = { title: "Invoice — Technic Technologies" };
 
-export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function InvoiceDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | undefined>>;
+}) {
   const user = await requirePermissionInFirm("invoice.view");
   const { id } = await params;
+  const sParams = searchParams ? await searchParams : {};
 
   let invoice;
   try {
@@ -44,6 +53,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     invoice.status !== "CANCELLED" &&
     Number(invoice.amountDue) > 0 &&
     user.permissions.includes("payments.create");
+  const canEdit =
+    invoice.status !== "CANCELLED" &&
+    (user.permissions.includes("invoice.create") ||
+      user.permissions.includes("sales.edit") ||
+      user.permissions.includes("invoice.edit"));
 
   return (
     <div className="space-y-4">
@@ -64,6 +78,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               documentNumber={invoice.invoiceNumber}
               customerPhone={invoice.billToPhone || undefined}
             />
+            {canEdit ? (
+              <EditInvoiceButton
+                invoice={invoice}
+                defaultOpen={sParams.edit === "true"}
+              />
+            ) : null}
             {canRecordPayment ? (
               <RecordInvoicePaymentButton invoiceId={invoice.id} amountDue={Number(invoice.amountDue)} />
             ) : null}

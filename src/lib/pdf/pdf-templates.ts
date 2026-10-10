@@ -317,7 +317,7 @@ export async function generateQuotationPDF(quotationId: string): Promise<{ buffe
     cgst: num(quotation.cgstAmount),
     sgst: num(quotation.sgstAmount),
     igst: num(quotation.igstAmount),
-    roundOff: 0,
+    roundOff: num(quotation.roundOff),
     total: num(quotation.totalAmount),
   };
 

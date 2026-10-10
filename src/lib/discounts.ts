@@ -48,10 +48,12 @@ export function computeDiscountSummary({
   lines,
   billDiscount,
   mode = "GST",
+  manualRoundOff,
 }: {
   lines: LineDiscountInput[];
   billDiscount?: BillDiscountInput | null;
   mode?: "GST" | "NON_GST";
+  manualRoundOff?: number | null;
 }): ComputedDiscountSummary {
   let grossSubtotal = 0;
   let lineDiscountTotal = 0;
@@ -183,8 +185,11 @@ export function computeDiscountSummary({
     totalBeforeRound = round2(totalBeforeRound + line.netTotal);
   }
 
-  const totalAmount = Math.round(totalBeforeRound);
-  const roundOff = round2(totalAmount - totalBeforeRound);
+  const roundOff =
+    typeof manualRoundOff === "number" && !isNaN(manualRoundOff)
+      ? round2(manualRoundOff)
+      : round2(Math.round(totalBeforeRound) - totalBeforeRound);
+  const totalAmount = round2(totalBeforeRound + roundOff);
 
   return {
     lines: computedLines,

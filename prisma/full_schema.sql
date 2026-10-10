@@ -575,6 +575,7 @@ CREATE TABLE "quotations" (
     "cgstAmount" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "sgstAmount" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "igstAmount" DECIMAL(12,2) NOT NULL DEFAULT 0,
+    "roundOff" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "totalAmount" DECIMAL(12,2) NOT NULL DEFAULT 0,
     "notes" TEXT,
     "terms" TEXT,

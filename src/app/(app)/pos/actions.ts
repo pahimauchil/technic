@@ -24,6 +24,7 @@ export interface CheckoutInput {
   /** Requested tax treatment. Only users with GST billing permission may
    *  request "GST"; everyone else is always billed non-GST. */
   taxMode?: "GST" | "NON_GST";
+  manualRoundOff?: number | null;
 }
 
 /**
@@ -58,6 +59,7 @@ export async function checkoutAction(input: CheckoutInput) {
       paymentMethod: input.paymentMethod,
       notes: input.notes ?? null,
       userId: user.id,
+      manualRoundOff: input.manualRoundOff,
     });
 
     revalidatePath("/invoices");

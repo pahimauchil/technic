@@ -16,11 +16,21 @@ import { formatDate } from "@/lib/dates";
 import { QUOTATION_STATUS_LABELS } from "@/lib/workflow";
 import { NotFoundError } from "@/lib/action-result";
 
+import { isPlatformRole } from "@/lib/rbac";
+import { EditQuotationButton } from "../edit-quotation-button";
+
 export const metadata = { title: "Quotation — Technic Technologies" };
 
-export default async function QuotationDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function QuotationDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams?: Promise<Record<string, string | undefined>>;
+}) {
   const user = await requirePermissionInFirm("quotation.view");
   const { id } = await params;
+  const sParams = searchParams ? await searchParams : {};
 
   let quotation;
   try {
@@ -34,6 +44,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
 
   const isGst = quotation.taxMode === "GST";
   const canConvert = quotation.status !== "CONVERTED" && user.permissions.includes("quotation.convert");
+  const canEdit =
+    quotation.status !== "CONVERTED" &&
+    (user.permissions.includes("quotation.create") ||
+      user.permissions.includes("sales.edit") ||
+      user.permissions.includes("quotation.edit"));
+  const canSwitchMode = isPlatformRole(user.role);
 
   return (
     <div className="space-y-4">
@@ -54,6 +70,13 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
               documentNumber={quotation.quotationNumber}
               customerPhone={quotation.customer.phone}
             />
+            {canEdit ? (
+              <EditQuotationButton
+                quotation={quotation}
+                canSwitchMode={canSwitchMode}
+                defaultOpen={sParams.edit === "true"}
+              />
+            ) : null}
             {canConvert ? (
               <Button asChild>
                 <Link href={`/quotations/${quotation.id}/convert`}>Convert to Invoice</Link>
@@ -131,6 +154,12 @@ export default async function QuotationDetailPage({ params }: { params: Promise<
                   {Number(quotation.sgstAmount) > 0 ? <div className="flex justify-between"><span className="text-muted-foreground">SGST</span><span className="numeric">{formatCurrency(quotation.sgstAmount)}</span></div> : null}
                   {Number(quotation.igstAmount) > 0 ? <div className="flex justify-between"><span className="text-muted-foreground">IGST</span><span className="numeric">{formatCurrency(quotation.igstAmount)}</span></div> : null}
                 </>
+              ) : null}
+              {Number(quotation.roundOff) !== 0 ? (
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Round off</span>
+                  <span className="numeric">{formatCurrency(quotation.roundOff)}</span>
+                </div>
               ) : null}
               <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
                 <span>Total</span><span className="numeric">{formatCurrency(quotation.totalAmount)}</span>

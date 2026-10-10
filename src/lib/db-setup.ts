@@ -13,7 +13,7 @@ class PGliteClient {
       const rows = res.rows.map((row: any) =>
         res.fields.map((f: any) => {
           const val = row[f.name];
-          if (val !== null && typeof val === "object" && !(val instanceof Date) && !Buffer.isBuffer(val)) {
+          if (val !== null && typeof val === "object" && !(val instanceof Date) && !Buffer.isBuffer(val) && !Array.isArray(val)) {
             return JSON.stringify(val);
           }
           return val;
@@ -29,7 +29,7 @@ class PGliteClient {
       const normalized: Record<string, any> = {};
       for (const f of res.fields) {
         const val = row[f.name];
-        if (val !== null && typeof val === "object" && !(val instanceof Date) && !Buffer.isBuffer(val)) {
+        if (val !== null && typeof val === "object" && !(val instanceof Date) && !Buffer.isBuffer(val) && !Array.isArray(val)) {
           normalized[f.name] = JSON.stringify(val);
         } else {
           normalized[f.name] = val;

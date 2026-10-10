@@ -64,10 +64,6 @@ interface Line {
   quantity: string;
   /** Raw input text — kept as a string so the field can be cleared while editing. */
   unitPrice: string;
-  /** Raw input text — line discount value. */
-  discount: string;
-  /** Discount type: percent (%) or flat amount (₹) */
-  discountType: DiscountType;
   trackSerials: boolean;
   serials: string[];
 }
@@ -91,7 +87,9 @@ export function NewQuotationButton({
   const [notes, setNotes] = useState("");
   const [billDiscount, setBillDiscount] = useState("");
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>("%");
-  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0", discount: "0", discountType: "%", trackSerials: false, serials: [] }]);
+  const [roundOff, setRoundOff] = useState("");
+  const [isManualRoundOff, setIsManualRoundOff] = useState(false);
+  const [lines, setLines] = useState<Line[]>([{ key: 0, productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
   const [addProductOpen, setAddProductOpen] = useState(false);
   const [addCustomerOpen, setAddCustomerOpen] = useState(false);
   /** The line the product was requested from, so the new product lands there. */
@@ -131,7 +129,7 @@ export function NewQuotationButton({
     setLines((current) => current.map((line) => (line.key === key ? { ...line, ...updates } : line)));
 
   const addLine = () =>
-    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", discount: "0", discountType: "%", trackSerials: false, serials: [] }]);
+    setLines((current) => [...current, { key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
 
   /** A product created from inside this dialog: select it without leaving or resetting anything. */
   const onProductCreated = (created: QuickProduct) => {
@@ -149,7 +147,7 @@ export function NewQuotationButton({
       if (target) return current.map((line) => (line.key === target.key ? { ...line, ...filled } : line));
       return [
         ...current,
-        { key: (lineKey += 1), quantity: "1", discount: "0", discountType: "%", ...filled } as Line,
+        { key: (lineKey += 1), quantity: "1", ...filled } as Line,
       ];
     });
     setAddProductForLine(null);
@@ -168,8 +166,7 @@ export function NewQuotationButton({
         return {
           quantity: parseNumericInput(line.quantity),
           unitPrice: parseNumericInput(line.unitPrice),
-          discountType: line.discountType,
-          discountValue: parseNumericInput(line.discount),
+          discountValue: 0,
           gstRate: product?.gstRate ?? 18,
         };
       }),
@@ -181,8 +178,9 @@ export function NewQuotationButton({
             }
           : null,
       mode: taxMode,
+      manualRoundOff: isManualRoundOff ? parseNumericInput(roundOff) : undefined,
     });
-  }, [validLines, billDiscount, billDiscountType, taxMode, productById]);
+  }, [validLines, billDiscount, billDiscountType, taxMode, productById, isManualRoundOff, roundOff]);
 
   const submit = () => {
     startTransition(async () => {
@@ -191,6 +189,7 @@ export function NewQuotationButton({
         taxMode,
         validUntil: validUntil || null,
         notes: notes || null,
+        manualRoundOff: totals.roundOff,
         lines: validLines.map((line, index) => {
           const product = productById.get(line.productId);
           return {
@@ -206,9 +205,11 @@ export function NewQuotationButton({
       if (result.ok) {
         toast.success(`Quotation ${result.data.quotationNumber} created`);
         setOpen(false);
-        setLines([{ key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", discount: "0", discountType: "%", trackSerials: false, serials: [] }]);
+        setLines([{ key: (lineKey += 1), productId: "", quantity: "1", unitPrice: "0", trackSerials: false, serials: [] }]);
         setCustomerId("");
         setBillDiscount("");
+        setRoundOff("");
+        setIsManualRoundOff(false);
         setValidUntil("");
         setNotes("");
         router.refresh();
@@ -331,68 +332,11 @@ export function NewQuotationButton({
                         aria-label="Rate"
                       />
                     </div>
-                    <div className="w-32">
-                      <Label className="text-xs text-muted-foreground">Disc</Label>
-                      <div className="flex items-center rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
-                        <Input
-                          className="h-8 flex-1 border-0 shadow-none focus-visible:ring-0 numeric px-2 text-right text-xs"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          placeholder="0"
-                          value={line.discount}
-                          onChange={(e) => setLine(line.key, { discount: e.target.value })}
-                          onBlur={(e) =>
-                            setLine(line.key, {
-                              discount: tidyDiscountOnBlur(
-                                e.target.value,
-                                line.discountType,
-                                parseNumericInput(line.unitPrice) * parseNumericInput(line.quantity),
-                              ),
-                            })
-                          }
-                          aria-label="Discount"
-                        />
-                        <div className="flex items-center gap-0.5 bg-muted/70 p-0.5 rounded mr-1">
-                          <button
-                            type="button"
-                            className={cn(
-                              "px-1.5 py-0.5 text-[10px] font-bold rounded transition-colors",
-                              line.discountType === "%"
-                                ? "bg-background text-foreground shadow-xs"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                            onClick={() => setLine(line.key, { discountType: "%" })}
-                            title="Percent"
-                          >
-                            %
-                          </button>
-                          <button
-                            type="button"
-                            className={cn(
-                              "px-1.5 py-0.5 text-[10px] font-bold rounded transition-colors",
-                              line.discountType === "₹"
-                                ? "bg-background text-foreground shadow-xs"
-                                : "text-muted-foreground hover:text-foreground",
-                            )}
-                            onClick={() => setLine(line.key, { discountType: "₹" })}
-                            title="Rupees"
-                          >
-                            ₹
-                          </button>
-                        </div>
-                      </div>
-                    </div>
                     {(() => {
                       const lineIdx = validLines.findIndex((l) => l.key === line.key);
                       const lineComputed = lineIdx >= 0 ? totals.lines[lineIdx] : undefined;
                       return (
                         <div className="ml-auto pt-5 flex items-baseline gap-1.5">
-                          {lineComputed && lineComputed.totalDiscountAmount > 0 ? (
-                            <span className="text-xs text-muted-foreground line-through numeric">
-                              {formatCurrency(lineComputed.gross)}
-                            </span>
-                          ) : null}
                           <span className="numeric text-sm font-semibold">
                             {formatCurrency(
                               lineComputed
@@ -501,25 +445,77 @@ export function NewQuotationButton({
                 <span className="text-muted-foreground">Items subtotal</span>
                 <span className="numeric">{formatCurrency(totals.grossSubtotal)}</span>
               </div>
-              {totals.lineDiscountTotal > 0 ? (
-                <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                  <span>Item discount(s)</span>
-                  <span className="numeric">-{formatCurrency(totals.lineDiscountTotal)}</span>
-                </div>
-              ) : null}
               {totals.billDiscountTotal > 0 ? (
                 <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                   <span>Bill discount ({billDiscountType === "%" ? `${parseNumericInput(billDiscount)}%` : "flat"})</span>
                   <span className="numeric">-{formatCurrency(totals.billDiscountTotal)}</span>
                 </div>
               ) : null}
-              {totals.totalDiscount > 0 && totals.lineDiscountTotal > 0 && totals.billDiscountTotal > 0 ? (
-                <div className="flex justify-between font-medium text-emerald-600 dark:text-emerald-400 border-t border-dashed border-border pt-1">
-                  <span>Total discount</span>
-                  <span className="numeric">-{formatCurrency(totals.totalDiscount)}</span>
-                </div>
+              {taxMode === "GST" ? (
+                <>
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Taxable value</span>
+                    <span className="numeric">{formatCurrency(totals.taxableTotal)}</span>
+                  </div>
+                  {totals.cgstTotal > 0 ? (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>CGST</span>
+                      <span className="numeric">{formatCurrency(totals.cgstTotal)}</span>
+                    </div>
+                  ) : null}
+                  {totals.sgstTotal > 0 ? (
+                    <div className="flex justify-between text-xs text-muted-foreground">
+                      <span>SGST</span>
+                      <span className="numeric">{formatCurrency(totals.sgstTotal)}</span>
+                    </div>
+                  ) : null}
+                </>
               ) : null}
-              <div className="flex justify-between border-t border-border pt-1 text-base font-semibold">
+              <div className="flex items-center justify-between text-xs pt-1 border-t border-border/60">
+                <div className="flex items-center gap-1.5 text-muted-foreground">
+                  <span>Round off</span>
+                  {isManualRoundOff ? (
+                    <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                      Manual
+                    </span>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {isManualRoundOff ? (
+                    <button
+                      type="button"
+                      className="text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                      onClick={() => {
+                        setIsManualRoundOff(false);
+                        setRoundOff("");
+                      }}
+                    >
+                      Reset auto
+                    </button>
+                  ) : null}
+                  <Input
+                    className="h-7 w-24 text-right numeric text-xs font-mono"
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={
+                      isManualRoundOff
+                        ? roundOff
+                        : totals.roundOff !== 0
+                        ? totals.roundOff > 0
+                          ? `+${totals.roundOff.toFixed(2)}`
+                          : totals.roundOff.toFixed(2)
+                        : "0.00"
+                    }
+                    onChange={(e) => {
+                      setIsManualRoundOff(true);
+                      setRoundOff(e.target.value);
+                    }}
+                    aria-label="Manual round figure"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-between border-t border-border pt-1.5 text-base font-semibold">
                 <span>Quotation total</span>
                 <span className="numeric">{formatCurrency(totals.totalAmount)}</span>
               </div>

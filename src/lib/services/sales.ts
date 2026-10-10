@@ -9,6 +9,7 @@ import { nextDocumentNumber, DOCUMENT_TYPES, financialYearFor } from "@/lib/sequ
 import { recordAudit, modeLabel } from "@/lib/audit";
 import {
   assertSerialsAvailableForSale,
+  getStockLevel,
   requireProduct,
   transitionSerialUnits,
   writeStockTransaction,
@@ -44,6 +45,7 @@ export interface QuotationInput {
   terms?: string | null;
   lines: SaleLineInput[];
   userId?: string | null;
+  manualRoundOff?: number | null;
 }
 
 const round = round2;
@@ -59,6 +61,7 @@ async function buildLinesWithTax(
   lines: SaleLineInput[],
   mode: TaxMode,
   sameState: boolean,
+  manualRoundOff?: number | null,
 ) {
   if (lines.length === 0) throw new BusinessRuleError("Add at least one line item");
   const productIds = [...new Set(lines.map((l) => l.productId))];
@@ -87,7 +90,7 @@ async function buildLinesWithTax(
       discountPercent: line.discountPercent ?? 0,
       gstRate: mode === "GST" ? (line.gstRate ?? 0) : 0,
     })),
-    { mode, sameState },
+    { mode, sameState, manualRoundOff },
   );
 
   return { enriched, summary };
@@ -99,7 +102,7 @@ async function buildLinesWithTax(
 
 export async function createQuotation(input: QuotationInput) {
   const sameState = isSameState(null, null); // quotations are indicative only
-  const { enriched, summary } = await buildLinesWithTax(input.lines, input.taxMode, sameState);
+  const { enriched, summary } = await buildLinesWithTax(input.lines, input.taxMode, sameState, input.manualRoundOff);
 
   const quotationNumber = await nextDocumentNumber(
     input.firmId,
@@ -123,6 +126,7 @@ export async function createQuotation(input: QuotationInput) {
         cgstAmount: summary.cgstAmount,
         sgstAmount: summary.sgstAmount,
         igstAmount: summary.igstAmount,
+        roundOff: summary.roundOff,
         totalAmount: summary.totalAmount,
         notes: input.notes ?? null,
         terms: input.terms ?? null,
@@ -176,6 +180,109 @@ export async function updateQuotationStatus(
   return prisma.quotation.update({
     where: { id: quotationId },
     data: { status },
+  });
+}
+
+export interface UpdateQuotationInput {
+  firmId: string;
+  quotationId: string;
+  customerId?: string;
+  taxMode?: TaxMode;
+  quotationDate?: Date;
+  validUntil?: Date | null;
+  notes?: string | null;
+  terms?: string | null;
+  status?: "DRAFT" | "SENT" | "ACCEPTED" | "REJECTED" | "EXPIRED";
+  lines?: SaleLineInput[];
+  userId?: string | null;
+  manualRoundOff?: number | null;
+}
+
+export async function updateQuotation(input: UpdateQuotationInput) {
+  const quotation = await prisma.quotation.findFirst({
+    where: { id: input.quotationId, firmId: input.firmId },
+    include: { lines: true },
+  });
+  if (!quotation) throw new NotFoundError("Quotation not found");
+  if (quotation.status === "CONVERTED") {
+    throw new BusinessRuleError("A converted quotation cannot be edited");
+  }
+
+  const targetCustomerId = input.customerId ?? quotation.customerId;
+  const targetTaxMode = input.taxMode ?? quotation.taxMode;
+  const linesToUse = input.lines ?? quotation.lines.map((l) => ({
+    productId: l.productId,
+    variantId: l.variantId,
+    quantity: l.quantity,
+    unitPrice: Number(l.unitPrice),
+    discountPercent: Number(l.discountPercent),
+    gstRate: Number(l.gstRate),
+    serialNumbers: l.serialNumbers,
+    descriptionOverride: l.description,
+  }));
+
+  const sameState = isSameState(null, null);
+  const { enriched, summary } = await buildLinesWithTax(linesToUse, targetTaxMode, sameState, input.manualRoundOff);
+
+  return prisma.$transaction(async (tx) => {
+    await tx.quotationLine.deleteMany({
+      where: { quotationId: quotation.id },
+    });
+
+    await tx.quotation.update({
+      where: { id: quotation.id },
+      data: {
+        customerId: targetCustomerId,
+        taxMode: targetTaxMode,
+        quotationDate: input.quotationDate ?? quotation.quotationDate,
+        validUntil: input.validUntil !== undefined ? input.validUntil : quotation.validUntil,
+        notes: input.notes !== undefined ? input.notes : quotation.notes,
+        terms: input.terms !== undefined ? input.terms : quotation.terms,
+        status: input.status ?? quotation.status,
+        subtotal: summary.subtotal,
+        discountAmount: summary.discountAmount,
+        taxableAmount: summary.taxableAmount,
+        cgstAmount: summary.cgstAmount,
+        sgstAmount: summary.sgstAmount,
+        igstAmount: summary.igstAmount,
+        roundOff: summary.roundOff,
+        totalAmount: summary.totalAmount,
+      },
+    });
+
+    await tx.quotationLine.createMany({
+      data: enriched.map(({ line, product, variant }, index) => ({
+        quotationId: quotation.id,
+        productId: product.id,
+        variantId: variant?.id ?? null,
+        description: line.descriptionOverride ?? lineDescription(product, variant),
+        hsnCode: product.hsnCode,
+        quantity: line.quantity,
+        unitPrice: round(line.unitPrice),
+        discountPercent: line.discountPercent ?? 0,
+        gstRate: targetTaxMode === "GST" ? (line.gstRate ?? 0) : 0,
+        lineTotal: summary.lines[index].lineTotal,
+        serialNumbers: line.serialNumbers ?? [],
+      })),
+    });
+
+    const updated = await tx.quotation.findUniqueOrThrow({
+      where: { id: quotation.id },
+      include: { lines: true },
+    });
+
+    await recordAudit({
+      action: "QUOTATION_CREATED",
+      entity: "Quotation",
+      entityId: quotation.id,
+      summary: `Quotation updated: ${quotation.quotationNumber} (${modeLabel(targetTaxMode)})`,
+      firmId: input.firmId,
+      branchId: quotation.branchId,
+      userId: input.userId,
+      after: { total: Number(updated.totalAmount) },
+    });
+
+    return updated;
   });
 }
 
@@ -262,6 +369,7 @@ export interface InvoiceInput {
   paymentAmount?: number;
   paymentMethod?: "CASH" | "UPI" | "CARD" | "BANK_TRANSFER" | "CHEQUE" | "OTHER";
   userId?: string | null;
+  manualRoundOff?: number | null;
 }
 
 /**
@@ -289,7 +397,7 @@ export async function createInvoice(input: InvoiceInput) {
   const supplyState = input.taxMode === "GST" ? (customer.state ?? customer.city ?? null) : null;
   const sameState = isSameState(sellerState, supplyState);
 
-  const { enriched, summary } = await buildLinesWithTax(input.lines, input.taxMode, sameState);
+  const { enriched, summary } = await buildLinesWithTax(input.lines, input.taxMode, sameState, input.manualRoundOff);
 
   // Serial validation before anything is written.
   for (const { line, product } of enriched) {
@@ -650,6 +758,297 @@ export async function cancelInvoice(
   });
 }
 
+export interface UpdateInvoiceInput {
+  firmId: string;
+  invoiceId: string;
+  userId?: string | null;
+  customerId?: string;
+  invoiceDate?: Date;
+  dueDate?: Date | null;
+  billToName?: string;
+  billToPhone?: string | null;
+  billToEmail?: string | null;
+  billToAddress?: string | null;
+  billToGstin?: string | null;
+  placeOfSupply?: string | null;
+  notes?: string | null;
+  terms?: string | null;
+  dispatchThrough?: string | null;
+  vehicleNumber?: string | null;
+  ewayBillNumber?: string | null;
+  buyerOrderNo?: string | null;
+  lines?: SaleLineInput[];
+  manualRoundOff?: number | null;
+}
+
+export async function updateInvoice(input: UpdateInvoiceInput) {
+  const invoice = await prisma.invoice.findFirst({
+    where: { id: input.invoiceId, firmId: input.firmId },
+    include: { lines: true, salesReturns: true },
+  });
+  if (!invoice) throw new NotFoundError("Invoice not found");
+  if (invoice.status === "CANCELLED") {
+    throw new BusinessRuleError("A cancelled invoice cannot be edited");
+  }
+
+  const targetCustomerId = input.customerId ?? invoice.customerId;
+  const customer = await prisma.customer.findFirst({
+    where: { id: targetCustomerId, firmId: input.firmId },
+  });
+  if (!customer) throw new NotFoundError("Customer not found");
+
+  const sellerState = await sellerStateFor(input.firmId, invoice.branchId);
+  const supplyState = invoice.taxMode === "GST"
+    ? (input.placeOfSupply ?? customer.state ?? customer.city ?? null)
+    : null;
+  const sameState = isSameState(sellerState, supplyState);
+
+  const shouldUpdateLines = Array.isArray(input.lines) && input.lines.length > 0;
+
+  if (shouldUpdateLines && invoice.salesReturns.length > 0) {
+    throw new BusinessRuleError(
+      "Line items cannot be modified because a sales return has already been processed for this invoice.",
+    );
+  }
+
+  const financialYear = input.invoiceDate ? financialYearFor(input.invoiceDate) : invoice.financialYear;
+
+  return prisma.$transaction(async (tx) => {
+    let summary: any = null;
+    let enrichedLines: any[] = [];
+
+    if (shouldUpdateLines && input.lines) {
+      // 1. Revert previous stock movements
+      for (const line of invoice.lines) {
+        await writeStockTransaction(tx, {
+          firmId: input.firmId,
+          branchId: invoice.branchId,
+          productId: line.productId,
+          variantId: line.variantId,
+          type: "SALE_RETURN_IN",
+          quantity: line.quantity,
+          reference: invoice.invoiceNumber,
+          documentType: "INVOICE_EDIT",
+          documentId: invoice.id,
+          notes: "Invoice edited — previous stock restored",
+          userId: input.userId ?? null,
+        });
+      }
+
+      // 2. Release previous serials and delete prior warranties
+      await tx.serialUnit.updateMany({
+        where: { soldInvoiceId: invoice.id },
+        data: {
+          status: "IN_STOCK",
+          soldInvoiceId: null,
+          soldInvoiceLineId: null,
+          sellingPrice: 0,
+          soldAt: null,
+        },
+      });
+
+      await tx.warranty.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
+
+      // 3. Validate and build new lines
+      const built = await buildLinesWithTax(input.lines, invoice.taxMode, sameState, input.manualRoundOff);
+      enrichedLines = built.enriched;
+      summary = built.summary;
+
+      // Validate serials and stock availability
+      for (const { line, product } of enrichedLines) {
+        if (product.trackSerials) {
+          const serials = line.serialNumbers ?? [];
+          if (serials.filter((s: string) => s.trim()).length !== line.quantity) {
+            throw new BusinessRuleError(
+              `${product.name} requires ${line.quantity} serial number${line.quantity === 1 ? "" : "s"}`,
+            );
+          }
+          await assertSerialsAvailableForSale(input.firmId, product.id, invoice.branchId, serials, tx);
+        } else {
+          const available = await getStockLevel(
+            input.firmId,
+            invoice.branchId,
+            { productId: product.id, variantId: line.variantId ?? null },
+            tx,
+          );
+          if (available < line.quantity) {
+            throw new BusinessRuleError(
+              `Insufficient stock for ${product.name}: ${available} available, ${line.quantity} requested`,
+            );
+          }
+        }
+      }
+
+      // Delete old lines
+      await tx.invoiceLine.deleteMany({
+        where: { invoiceId: invoice.id },
+      });
+    }
+
+    const newTotal = summary ? summary.totalAmount : Number(invoice.totalAmount);
+    const amountPaid = Number(invoice.amountPaid);
+    const newAmountDue = Math.max(0, round(newTotal - amountPaid));
+    const newStatus = amountPaid >= newTotal ? "PAID" : amountPaid > 0 ? "PARTIALLY_PAID" : "ISSUED";
+
+    const updateData: any = {
+      customerId: targetCustomerId,
+      financialYear,
+      invoiceDate: input.invoiceDate ?? invoice.invoiceDate,
+      dueDate: input.dueDate !== undefined ? input.dueDate : invoice.dueDate,
+      billToName: input.billToName ?? invoice.billToName,
+      billToPhone: input.billToPhone !== undefined ? input.billToPhone : invoice.billToPhone,
+      billToEmail: input.billToEmail !== undefined ? input.billToEmail : invoice.billToEmail,
+      billToAddress: input.billToAddress !== undefined ? input.billToAddress : invoice.billToAddress,
+      billToGstin: input.billToGstin !== undefined ? input.billToGstin : invoice.billToGstin,
+      placeOfSupply: supplyState,
+      notes: input.notes !== undefined ? input.notes : invoice.notes,
+      terms: input.terms !== undefined ? input.terms : invoice.terms,
+      dispatchThrough: input.dispatchThrough !== undefined ? input.dispatchThrough : invoice.dispatchThrough,
+      vehicleNumber: input.vehicleNumber !== undefined ? input.vehicleNumber : invoice.vehicleNumber,
+      ewayBillNumber: input.ewayBillNumber !== undefined ? input.ewayBillNumber : invoice.ewayBillNumber,
+      buyerOrderNo: input.buyerOrderNo !== undefined ? input.buyerOrderNo : invoice.buyerOrderNo,
+    };
+
+    if (shouldUpdateLines && summary) {
+      updateData.subtotal = summary.subtotal;
+      updateData.discountAmount = summary.discountAmount;
+      updateData.taxableAmount = summary.taxableAmount;
+      updateData.cgstAmount = summary.cgstAmount;
+      updateData.sgstAmount = summary.sgstAmount;
+      updateData.igstAmount = summary.igstAmount;
+      updateData.roundOff = summary.roundOff;
+      updateData.totalAmount = summary.totalAmount;
+      updateData.amountDue = newAmountDue;
+      updateData.status = newStatus;
+    }
+
+    await tx.invoice.update({
+      where: { id: invoice.id },
+      data: updateData,
+    });
+
+    if (shouldUpdateLines && summary) {
+      await tx.invoiceLine.createMany({
+        data: enrichedLines.map(({ line, product, variant }, index) => ({
+          invoiceId: invoice.id,
+          productId: product.id,
+          variantId: variant?.id ?? null,
+          description: line.descriptionOverride ?? lineDescription(product, variant),
+          hsnCode: product.hsnCode,
+          serialNumbers: (line.serialNumbers ?? []).filter(Boolean).join("\n") || null,
+          quantity: line.quantity,
+          unitPrice: round(line.unitPrice),
+          discountPercent: line.discountPercent ?? 0,
+          gstRate: invoice.taxMode === "GST" ? (line.gstRate ?? 0) : 0,
+          taxableValue: summary.lines[index].taxableValue,
+          cgstAmount: summary.lines[index].cgst,
+          sgstAmount: summary.lines[index].sgst,
+          igstAmount: summary.lines[index].igst,
+          lineTotal: summary.lines[index].lineTotal,
+        })),
+      });
+    }
+
+    const updated = await tx.invoice.findUniqueOrThrow({
+      where: { id: invoice.id },
+      include: { lines: true },
+    });
+
+    if (shouldUpdateLines && enrichedLines.length > 0) {
+      for (const [index, { line, product }] of enrichedLines.entries()) {
+        await writeStockTransaction(tx, {
+          firmId: input.firmId,
+          branchId: invoice.branchId,
+          productId: product.id,
+          variantId: line.variantId ?? null,
+          type: "SALE_OUT",
+          quantity: -line.quantity,
+          unitCost: Number(product.purchasePrice) || null,
+          reference: invoice.invoiceNumber,
+          documentType: "INVOICE",
+          documentId: invoice.id,
+          userId: input.userId ?? null,
+        });
+
+        if (product.trackSerials) {
+          const units = await tx.serialUnit.findMany({
+            where: {
+              firmId: input.firmId,
+              serialNumber: { in: (line.serialNumbers ?? []).filter(Boolean) },
+            },
+            select: { id: true, sellingPrice: true },
+          });
+          await transitionSerialUnits(tx, {
+            firmId: input.firmId,
+            serialUnitIds: units.map((u: { id: string }) => u.id),
+            eventType: "SOLD",
+            toStatus: "SOLD",
+            reference: invoice.invoiceNumber,
+            documentId: invoice.id,
+            userId: input.userId ?? null,
+          });
+          for (const unit of units) {
+            await tx.serialUnit.update({
+              where: { id: unit.id },
+              data: {
+                soldInvoiceId: invoice.id,
+                soldInvoiceLineId: updated.lines[index].id,
+                sellingPrice: round(line.unitPrice),
+                soldAt: input.invoiceDate ?? invoice.invoiceDate,
+              },
+            });
+            if (product.warrantyMonths > 0) {
+              const start = input.invoiceDate ?? invoice.invoiceDate;
+              const end = new Date(start);
+              end.setMonth(end.getMonth() + product.warrantyMonths);
+              await tx.warranty.create({
+                data: {
+                  firmId: input.firmId,
+                  productId: product.id,
+                  serialUnitId: unit.id,
+                  customerId: customer.id,
+                  invoiceId: invoice.id,
+                  branchId: invoice.branchId,
+                  serialNumber: null,
+                  warrantyStart: start,
+                  warrantyEnd: end,
+                  warrantyMonths: product.warrantyMonths,
+                  warrantyType: product.warrantyType,
+                  status: "ACTIVE",
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    if (invoice.customerId !== targetCustomerId) {
+      await recalcCustomerRollup(tx, input.firmId, invoice.customerId);
+      await recalcCustomerRollup(tx, input.firmId, targetCustomerId);
+    } else {
+      await recalcCustomerRollup(tx, input.firmId, invoice.customerId);
+    }
+
+    await recordAudit({
+      action: "INVOICE_CREATED",
+      entity: "Invoice",
+      entityId: invoice.id,
+      summary: `Invoice updated: ${invoice.invoiceNumber} (${invoice.taxMode === "GST" ? "Tax Invoice" : "Non-Tax Invoice"})`,
+      firmId: input.firmId,
+      branchId: invoice.branchId,
+      userId: input.userId,
+      after: {
+        total: Number(updated.totalAmount),
+      },
+    });
+
+    return updated;
+  });
+}
+
 export async function getInvoiceForView(
   firmId: string,
   invoiceId: string,
@@ -662,14 +1061,26 @@ export async function getInvoiceForView(
       branch: true,
       lines: {
         include: {
-          product: { select: { name: true, subName: true, sku: true, hsnCode: true } },
-          variant: { select: { name: true, sku: true } },
+          product: {
+            select: {
+              id: true,
+              name: true,
+              subName: true,
+              sku: true,
+              hsnCode: true,
+              trackSerials: true,
+              sellingPrice: true,
+              gstRate: true,
+            },
+          },
+          variant: { select: { id: true, name: true, sku: true } },
         },
       },
       payments: { orderBy: { paidAt: "asc" } },
       createdBy: { select: { name: true } },
       quotation: { select: { quotationNumber: true } },
       salesOrder: { select: { orderNumber: true } },
+      salesReturns: { select: { id: true } },
     },
   });
   if (!invoice) throw new NotFoundError("Invoice not found");
@@ -688,8 +1099,19 @@ export async function getQuotationForView(
       branch: true,
       lines: {
         include: {
-          product: { select: { name: true, subName: true, sku: true, hsnCode: true } },
-          variant: { select: { name: true, sku: true } },
+          product: {
+            select: {
+              id: true,
+              name: true,
+              subName: true,
+              sku: true,
+              hsnCode: true,
+              trackSerials: true,
+              sellingPrice: true,
+              gstRate: true,
+            },
+          },
+          variant: { select: { id: true, name: true, sku: true } },
         },
       },
       createdBy: { select: { name: true } },

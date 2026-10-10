@@ -104,14 +104,28 @@ export default async function QuotationsPage({
       key: "actions",
       header: "",
       headerClassName: "text-right",
+      className: "text-right",
       cell: (row) =>
-        row.status !== "CONVERTED" && user.permissions.includes("quotation.convert") ? (
-          <ConvertButton quotationId={row.id} />
+        row.status !== "CONVERTED" ? (
+          <div className="flex items-center justify-end gap-1.5">
+            {canEdit ? (
+              <Button asChild size="sm" variant="outline">
+                <Link href={`/quotations/${row.id}?edit=true`}>Edit</Link>
+              </Button>
+            ) : null}
+            {user.permissions.includes("quotation.convert") ? (
+              <ConvertButton quotationId={row.id} />
+            ) : null}
+          </div>
         ) : null,
     },
   ];
 
   const canCreate = user.permissions.includes("quotation.create");
+  const canEdit =
+    user.permissions.includes("quotation.create") ||
+    user.permissions.includes("sales.edit") ||
+    user.permissions.includes("quotation.edit");
   const canSwitchMode = isPlatformRole(user.role);
 
   return (
@@ -158,8 +172,19 @@ export default async function QuotationsPage({
                 <span className="numeric font-semibold">{formatCurrency(row.total)}</span>
               </div>
             </Link>
-            {row.status !== "CONVERTED" && user.permissions.includes("quotation.convert") ? (
-              <ConvertButton quotationId={row.id} />
+            {row.status !== "CONVERTED" ? (
+              <div className="flex items-center gap-2 pt-1">
+                {canEdit ? (
+                  <Button asChild size="sm" variant="outline" className="flex-1">
+                    <Link href={`/quotations/${row.id}?edit=true`}>Edit</Link>
+                  </Button>
+                ) : null}
+                {user.permissions.includes("quotation.convert") ? (
+                  <Button asChild size="sm" variant="outline" className="flex-1">
+                    <Link href={`/quotations/${row.id}/convert`}>Convert</Link>
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         )}

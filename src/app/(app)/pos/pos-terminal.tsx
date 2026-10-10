@@ -52,10 +52,6 @@ interface CartLine {
   quantity: string;
   /** Raw input text — kept as a string so the field can be cleared while editing. */
   unitPrice: string;
-  /** Raw input text — line discount value. */
-  discount: string;
-  /** Line discount unit: percent (%) or flat amount (₹). */
-  discountType: DiscountType;
   gstRate: number;
   trackSerials: boolean;
   serials: string[];
@@ -88,6 +84,8 @@ export function PosTerminal({
   const [customerId, setCustomerId] = useState<string>("");
   const [billDiscount, setBillDiscount] = useState("");
   const [billDiscountType, setBillDiscountType] = useState<DiscountType>("%");
+  const [roundOff, setRoundOff] = useState("");
+  const [isManualRoundOff, setIsManualRoundOff] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("CASH");
   const [pending, startTransition] = useTransition();
@@ -127,8 +125,6 @@ export function PosTerminal({
           name: [variant ? `${product.name} — ${variant.name}` : product.name, product.subName].filter(Boolean).join(" · "),
           quantity: "1",
           unitPrice: String(variant?.sellingPrice ?? product.sellingPrice),
-          discount: "0",
-          discountType: "%",
           gstRate: product.gstRate,
           trackSerials: product.trackSerials,
           serials: Array.from({ length: 1 }, () => ""),
@@ -176,8 +172,7 @@ export function PosTerminal({
       lines: cart.map((line) => ({
         quantity: parseNumericInput(line.quantity),
         unitPrice: parseNumericInput(line.unitPrice),
-        discountType: line.discountType,
-        discountValue: parseNumericInput(line.discount),
+        discountValue: 0,
         gstRate: mode === "GST" ? line.gstRate : 0,
       })),
       billDiscount:
@@ -188,8 +183,9 @@ export function PosTerminal({
             }
           : null,
       mode,
+      manualRoundOff: isManualRoundOff ? parseNumericInput(roundOff) : undefined,
     });
-  }, [cart, billDiscount, billDiscountType, mode]);
+  }, [cart, billDiscount, billDiscountType, mode, isManualRoundOff, roundOff]);
 
   const checkout = () => {
     if (!customerId) {
@@ -217,6 +213,7 @@ export function PosTerminal({
           gstRate: mode === "GST" ? line.gstRate : 0,
           serialNumbers: line.trackSerials ? line.serials.map((s) => s.trim()).filter(Boolean) : undefined,
         })),
+        manualRoundOff: totals.roundOff,
         paymentAmount: canCollectPayment ? Number(paymentAmount) || undefined : undefined,
         paymentMethod: paymentMethod as never,
         taxMode: mode,
@@ -425,80 +422,7 @@ export function PosTerminal({
                     }
                     aria-label="Unit price"
                   />
-                  <div className="flex items-center rounded-md border border-input bg-background focus-within:ring-1 focus-within:ring-ring">
-                    <Input
-                      className="h-8 w-16 border-0 shadow-none focus-visible:ring-0 numeric px-2 text-right text-xs"
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      placeholder="0"
-                      value={line.discount}
-                      onChange={(event) =>
-                        setCart((current) =>
-                          current.map((l) => (l.key === line.key ? { ...l, discount: event.target.value } : l)),
-                        )
-                      }
-                      onBlur={(event) =>
-                        setCart((current) =>
-                          current.map((l) =>
-                            l.key === line.key
-                              ? {
-                                  ...l,
-                                  discount: tidyDiscountOnBlur(
-                                    event.target.value,
-                                    l.discountType,
-                                    parseNumericInput(l.unitPrice) * parseNumericInput(l.quantity),
-                                  ),
-                                }
-                              : l,
-                          ),
-                        )
-                      }
-                      aria-label="Discount"
-                    />
-                    <div className="flex items-center gap-0.5 bg-muted/70 p-0.5 rounded mr-1">
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-1.5 py-0.5 text-[10px] font-bold rounded transition-colors",
-                          line.discountType === "%"
-                            ? "bg-background text-foreground shadow-xs"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                        onClick={() =>
-                          setCart((current) =>
-                            current.map((l) => (l.key === line.key ? { ...l, discountType: "%" } : l)),
-                          )
-                        }
-                        title="Discount in percent"
-                      >
-                        %
-                      </button>
-                      <button
-                        type="button"
-                        className={cn(
-                          "px-1.5 py-0.5 text-[10px] font-bold rounded transition-colors",
-                          line.discountType === "₹"
-                            ? "bg-background text-foreground shadow-xs"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                        onClick={() =>
-                          setCart((current) =>
-                            current.map((l) => (l.key === line.key ? { ...l, discountType: "₹" } : l)),
-                          )
-                        }
-                        title="Discount in rupees"
-                      >
-                        ₹
-                      </button>
-                    </div>
-                  </div>
                   <div className="ml-auto flex items-baseline gap-1.5">
-                    {lineComputed && lineComputed.totalDiscountAmount > 0 ? (
-                      <span className="text-xs text-muted-foreground line-through numeric">
-                        {formatCurrency(lineComputed.gross)}
-                      </span>
-                    ) : null}
                     <span className="numeric text-sm font-semibold">
                       {formatCurrency(lineComputed?.netTotal ?? 0)}
                     </span>
@@ -605,22 +529,10 @@ export function PosTerminal({
                   <span className="text-muted-foreground">Items subtotal</span>
                   <span className="numeric">{formatCurrency(totals.grossSubtotal)}</span>
                 </div>
-                {totals.lineDiscountTotal > 0 ? (
-                  <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
-                    <span>Item discounts</span>
-                    <span className="numeric">-{formatCurrency(totals.lineDiscountTotal)}</span>
-                  </div>
-                ) : null}
                 {totals.billDiscountTotal > 0 ? (
                   <div className="flex justify-between text-emerald-600 dark:text-emerald-400">
                     <span>Bill discount ({billDiscountType === "%" ? `${parseNumericInput(billDiscount)}%` : "flat"})</span>
                     <span className="numeric">-{formatCurrency(totals.billDiscountTotal)}</span>
-                  </div>
-                ) : null}
-                {totals.totalDiscount > 0 && totals.lineDiscountTotal > 0 && totals.billDiscountTotal > 0 ? (
-                  <div className="flex justify-between font-medium text-emerald-600 dark:text-emerald-400 border-t border-dashed border-border pt-1">
-                    <span>Total discount</span>
-                    <span className="numeric">-{formatCurrency(totals.totalDiscount)}</span>
                   </div>
                 ) : null}
                 {mode === "GST" ? (
@@ -632,9 +544,50 @@ export function PosTerminal({
                 ) : (
                   <div className="flex justify-between"><span className="text-muted-foreground">Tax</span><span className="numeric">Non-Tax</span></div>
                 )}
-                {totals.roundOff !== 0 ? (
-                  <div className="flex justify-between"><span className="text-muted-foreground">Round off</span><span className="numeric">{formatCurrency(totals.roundOff)}</span></div>
-                ) : null}
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-border/60">
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <span>Round off</span>
+                    {isManualRoundOff ? (
+                      <span className="rounded bg-amber-500/10 px-1 py-0.5 text-[10px] font-medium text-amber-600 dark:text-amber-400">
+                        Manual
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {isManualRoundOff ? (
+                      <button
+                        type="button"
+                        className="text-[11px] font-medium text-primary hover:underline cursor-pointer"
+                        onClick={() => {
+                          setIsManualRoundOff(false);
+                          setRoundOff("");
+                        }}
+                      >
+                        Reset auto
+                      </button>
+                    ) : null}
+                    <Input
+                      className="h-7 w-24 text-right numeric text-xs font-mono"
+                      type="number"
+                      step="0.01"
+                      placeholder="0.00"
+                      value={
+                        isManualRoundOff
+                          ? roundOff
+                          : totals.roundOff !== 0
+                          ? totals.roundOff > 0
+                            ? `+${totals.roundOff.toFixed(2)}`
+                            : totals.roundOff.toFixed(2)
+                          : "0.00"
+                      }
+                      onChange={(e) => {
+                        setIsManualRoundOff(true);
+                        setRoundOff(e.target.value);
+                      }}
+                      aria-label="Manual round figure"
+                    />
+                  </div>
+                </div>
                 <div className="flex justify-between border-t border-border pt-2 text-base font-semibold">
                   <span>Total</span><span className="numeric">{formatCurrency(totals.totalAmount)}</span>
                 </div>
